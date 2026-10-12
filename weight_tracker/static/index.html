@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>体重趋势</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --hover: rgba(11, 11, 11, 0.05);
+    --accent: #2a78d6;
+    --trend: #2a78d6;
+    --daily: #898781;
+    --good: #0ca30c;
+    --critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --hover: rgba(255, 255, 255, 0.06);
+      --accent: #3987e5;
+      --trend: #3987e5;
+      --daily: #898781;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --hover: rgba(255, 255, 255, 0.06);
+    --accent: #3987e5;
+    --trend: #3987e5;
+    --daily: #898781;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .secondary { color: var(--text-secondary); }
+  .muted { color: var(--text-muted); }
+  .num { font-variant-numeric: tabular-nums; }
+  .nowrap { white-space: nowrap; }
+
+  .top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .meta { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+
+  .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; padding: 2px; background: var(--surface); }
+  .segmented button {
+    font: inherit; font-size: 13px; color: var(--text-secondary); background: none;
+    border: 0; border-radius: 6px; padding: 4px 12px; cursor: pointer; min-height: 30px;
+  }
+  .segmented button:hover { background: var(--hover); }
+  .segmented button[aria-pressed="true"] { background: var(--text-primary); color: var(--surface); }
+
+  .banner {
+    margin-top: 16px; padding: 10px 14px; border-radius: 8px; font-size: 13px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary);
+  }
+  .banner[hidden] { display: none; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; }
+  .hint { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  input, select {
+    font: inherit; padding: 6px 10px; border-radius: 8px; min-height: 36px;
+    border: 1px solid var(--axis); background: var(--page); color: var(--text-primary);
+  }
+  button.primary, a.button {
+    font: inherit; font-weight: 500; padding: 6px 18px; border-radius: 8px; border: 0; min-height: 36px;
+    background: var(--text-primary); color: var(--surface); cursor: pointer;
+    display: inline-flex; align-items: center; text-decoration: none;
+  }
+  a.button.secondary-button { background: none; color: var(--text-primary); border: 1px solid var(--axis); }
+  button.link { font: inherit; font-size: 12px; background: none; border: 0; color: var(--text-muted); cursor: pointer; padding: 2px 6px; }
+  button.link:hover { color: var(--critical); }
+
+  /* ---------- entry ---------- */
+  .entry { margin-top: 16px; }
+  form.entry-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 12px; }
+  form.entry-form label { display: grid; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+  .weight-row { display: flex; align-items: flex-end; gap: 8px; }
+  .weight-row input { width: 128px; font-size: 22px; font-weight: 600; min-height: 44px; padding: 4px 12px; }
+  .weight-row .segmented { margin-bottom: 3px; }
+  form.entry-form input[type="date"] { width: 150px; }
+  .note-field { flex: 1 1 160px; }
+  .note-field input { width: 100%; }
+  form.entry-form button.primary { min-height: 40px; }
+  .form-status { font-size: 13px; min-height: 20px; margin-top: 10px; color: var(--text-secondary); }
+
+  /* ---------- tiles ---------- */
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+  .tile .label { font-size: 13px; color: var(--text-secondary); }
+  .tile .value { font-size: clamp(28px, 5vw, 40px); font-weight: 600; line-height: 1.15; margin: 4px 0 6px; }
+  .tile .value .unit { font-size: 0.42em; font-weight: 500; color: var(--text-secondary); margin-left: 3px; }
+  .tile .sub { font-size: 12px; color: var(--text-secondary); }
+  .tile .sub2 { font-size: 12px; color: var(--text-muted); }
+
+  /* ---------- chart ---------- */
+  .filters { display: flex; align-items: center; gap: 12px; margin: 28px 0 12px; flex-wrap: wrap; }
+  .chart-card header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 16px; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); }
+  .legend[hidden] { display: none; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--daily); }
+  .legend .line { width: 14px; height: 2px; border-radius: 1px; background: var(--trend); }
+  .chart { position: relative; height: 260px; margin-top: 8px; }
+  .chart svg { display: block; overflow: visible; }
+  .chart svg:focus { outline: none; }
+  .chart svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+  .chart .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-muted); font-size: 13px; text-align: center; }
+  .tooltip {
+    position: absolute; top: 4px; pointer-events: none; z-index: 2;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 8px 10px; font-size: 12px; white-space: nowrap;
+  }
+  .tooltip .when { color: var(--text-muted); margin-bottom: 4px; }
+  .tooltip .row { display: flex; align-items: center; gap: 8px; }
+  .tooltip .key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+  .tooltip .key.dot { width: 8px; height: 8px; border-radius: 50%; margin: 0 2px; }
+  .tooltip strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tooltip .extra { color: var(--text-muted); margin-top: 2px; }
+
+  /* ---------- tables ---------- */
+  .tables { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+  .table-card { padding: 16px 0 0; display: flex; flex-direction: column; }
+  .table-card > h2, .table-card > .hint { padding: 0 20px; }
+  .table-wrap { max-height: 360px; overflow: auto; margin-top: 10px; border-top: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 14px 6px 0; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th:first-child, td:first-child { padding-left: 20px; }
+  th:last-child, td:last-child { padding-right: 20px; }
+  th { font-weight: 500; color: var(--text-secondary); position: sticky; top: 0; background: var(--surface); }
+  td.r, th.r { text-align: right; }
+  td.note { white-space: normal; color: var(--text-secondary); min-width: 6em; }
+  .table-empty { padding: 14px 20px; color: var(--text-muted); font-size: 13px; }
+
+  details.card { margin-top: 12px; padding: 0; }
+  details summary { cursor: pointer; padding: 12px 20px; font-size: 13px; color: var(--text-secondary); }
+  details .table-wrap { margin-top: 0; }
+
+  /* ---------- import / export ---------- */
+  .io { margin-top: 28px; }
+  .io .intro { font-size: 13px; color: var(--text-secondary); margin-top: 4px; max-width: 70ch; }
+  .io-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 14px; font-size: 13px; color: var(--text-secondary); }
+  .io-row label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
+  .io-row input[type="file"] { min-width: 0; max-width: 100%; border: 0; padding: 0; min-height: 0; background: none; }
+  .io-status { font-size: 13px; margin-top: 10px; color: var(--text-secondary); }
+  .io-status ul { margin: 6px 0 0; padding-left: 20px; color: var(--text-muted); }
+
+  footer { margin-top: 28px; font-size: 12px; color: var(--text-muted); display: grid; gap: 4px; }
+
+  @media (max-width: 760px) {
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tables { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 520px) {
+    .card { padding: 14px 16px; }
+    .table-card { padding: 14px 0 0; }
+    .table-card > h2, .table-card > .hint { padding: 0 16px; }
+    th, td { padding-right: 8px; }
+    th:first-child, td:first-child { padding-left: 16px; }
+    th:last-child, td:last-child { padding-right: 16px; }
+    details summary { padding: 12px 16px; }
+    form.entry-form button.primary { flex: 1 0 100%; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div>
+      <h1>体重趋势</h1>
+      <div class="meta" id="meta">正在读取…</div>
+    </div>
+    <div class="segmented" role="group" aria-label="显示单位">
+      <button type="button" data-unit="lb">lb</button>
+      <button type="button" data-unit="kg">kg</button>
+      <button type="button" data-unit="jin">斤</button>
+    </div>
+  </div>
+
+  <div class="banner" id="banner" role="status" hidden></div>
+
+  <section class="card entry" aria-labelledby="entry-title">
+    <h2 id="entry-title">记一笔</h2>
+    <form class="entry-form" id="entry-form" autocomplete="off">
+      <div class="weight-row">
+        <label><span>秤上的读数</span>
+          <input name="weight" type="number" step="0.1" min="1" inputmode="decimal" required aria-describedby="entry-hint">
+        </label>
+        <div class="segmented" role="group" aria-label="秤上显示的单位">
+          <button type="button" data-entry-unit="lb">lb</button>
+          <button type="button" data-entry-unit="kg">kg</button>
+        </div>
+      </div>
+      <label><span>日期</span><input name="date" type="date" required></label>
+      <label class="note-field"><span>备注（可不填）</span><input name="note" type="text" maxlength="200" placeholder="例如：聚餐后、出差"></label>
+      <button class="primary" type="submit">记录</button>
+    </form>
+    <div class="form-status" id="form-status" aria-live="polite"></div>
+    <div class="hint" id="entry-hint">每天固定在同一时间称最有可比性：早上起床、上完厕所、吃喝之前。一天称了几次的，按当天平均计算。</div>
+  </section>
+
+  <section class="tiles" aria-label="概况">
+    <div class="card tile" id="tile-latest">
+      <div class="label">最近一次</div>
+      <div class="value"><span class="v">–</span><span class="unit"></span></div>
+      <div class="sub"></div><div class="sub2"></div>
+    </div>
+    <div class="card tile" id="tile-week">
+      <div class="label">本周平均</div>
+      <div class="value"><span class="v">–</span><span class="unit"></span></div>
+      <div class="sub"></div><div class="sub2"></div>
+    </div>
+    <div class="card tile" id="tile-month">
+      <div class="label">本月平均</div>
+      <div class="value"><span class="v">–</span><span class="unit"></span></div>
+      <div class="sub"></div><div class="sub2"></div>
+    </div>
+    <div class="card tile" id="tile-trend">
+      <div class="label">近 4 周趋势</div>
+      <div class="value"><span class="v">–</span><span class="unit"></span></div>
+      <div class="sub"></div><div class="sub2"></div>
+    </div>
+  </section>
+
+  <div class="filters">
+    <div class="segmented" role="group" aria-label="时间范围">
+      <button type="button" data-range="30">30 天</button>
+      <button type="button" data-range="90">90 天</button>
+      <button type="button" data-range="365">1 年</button>
+      <button type="button" data-range="all">全部</button>
+    </div>
+    <div class="segmented" role="group" aria-label="图表按天、周或月显示">
+      <button type="button" data-grain="day">每天</button>
+      <button type="button" data-grain="week">每周平均</button>
+      <button type="button" data-grain="month">每月平均</button>
+    </div>
+  </div>
+
+  <section class="card chart-card">
+    <header>
+      <h2 id="chart-title">体重</h2>
+      <div class="legend" id="legend">
+        <span><span class="dot"></span>当天</span>
+        <span><span class="line"></span>7 天平均</span>
+      </div>
+    </header>
+    <div class="hint" id="chart-hint"></div>
+    <div class="chart" id="chart"></div>
+  </section>
+
+  <div class="tables">
+    <section class="card table-card" aria-labelledby="weeks-title">
+      <h2 id="weeks-title">每周平均</h2>
+      <div class="hint">周一到周日，按每天的读数平均</div>
+      <div class="table-wrap" id="weeks"></div>
+    </section>
+    <section class="card table-card" aria-labelledby="months-title">
+      <h2 id="months-title">每月平均</h2>
+      <div class="hint">自然月，按每天的读数平均</div>
+      <div class="table-wrap" id="months"></div>
+    </section>
+  </div>
+
+  <details class="card" id="entries-card">
+    <summary id="entries-summary">全部记录</summary>
+    <div class="table-wrap" id="entries"></div>
+  </details>
+
+  <section class="card io" aria-labelledby="io-title">
+    <h2 id="io-title">导入 / 导出</h2>
+    <p class="intro">以前在手机备忘录、Excel 或其他 App 里记过体重，可以导出成 CSV 再导入这里。文件里要有一列日期和一列体重（表头写 date / 日期 和 weight / 体重 即可）；重复的记录会自动跳过，导入两次也不会重复。导出的 CSV 可以直接用 Excel 打开，也是这里的备份。</p>
+    <div class="io-row">
+      <label>文件里没写单位时按
+        <select id="import-unit" aria-label="文件里没写单位时使用的单位">
+          <option value="lb">lb</option>
+          <option value="kg">kg</option>
+        </select>
+      </label>
+      <label><span class="nowrap">选择 CSV 文件：</span><input type="file" id="import-file" accept=".csv,.txt,text/csv"></label>
+      <a class="button secondary-button" href="/api/export.csv" download>导出全部记录 (CSV)</a>
+    </div>
+    <div class="io-status" id="io-status" aria-live="polite"></div>
+  </section>
+
+  <footer>
+    <div>“当天”是当天所有读数的平均；“7 天平均”是截至当天最近 7 天的平均。趋势是用最近 28 天每天的读数拟合的直线斜率。</div>
+    <div>数据保存在运行本程序的电脑上（SQLite 文件），不会上传到任何地方。</div>
+  </footer>
+</main>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const SVG_NS = "http://www.w3.org/2000/svg";
+const KG_PER_LB = 0.45359237;
+const DAY_MS = 86400e3;
+
+function loadPref(key, fallback, allowed) {
+  try {
+    const v = localStorage.getItem(key);
+    return allowed.includes(v) ? v : fallback;
+  } catch { return fallback; }
+}
+function savePref(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* private mode */ }
+}
+
+const state = {
+  unit: loadPref("unit", null, ["lb", "kg", "jin"]),           // null until we know what the scale shows
+  entryUnit: loadPref("entryUnit", null, ["lb", "kg"]),
+  range: loadPref("range", "90", ["30", "90", "365", "all"]),
+  grain: loadPref("grain", "day", ["day", "week", "month"]),
+  config: null,
+  summary: null,
+  entries: null,
+  error: null,
+  hover: null,
+};
+
+// ---------- units & formatting ----------
+
+const UNIT_LABEL = { lb: "lb", kg: "kg", jin: "斤" };
+const unit = () => state.unit || state.entryUnit || "lb";
+const unitLabel = () => UNIT_LABEL[unit()];
+const toUnit = (kg) => (unit() === "lb" ? kg / KG_PER_LB : unit() === "jin" ? kg * 2 : kg);
+const toKg = (v, u) => (u === "lb" ? v * KG_PER_LB : v);
+const fmtW = (kg) => toUnit(kg).toFixed(1);
+function fmtSigned(kg, digits = 1) {
+  const v = Number(toUnit(kg).toFixed(digits));
+  if (v === 0) return (0).toFixed(digits);
+  return (v > 0 ? "+" : "−") + Math.abs(v).toFixed(digits);
+}
+
+const pad = (n) => String(n).padStart(2, "0");
+const isoDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+function parseDate(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const todayDate = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); };
+const weekStartOf = (d) => addDays(d, -((d.getDay() + 6) % 7));
+
+const WEEKDAYS = "日一二三四五六";
+const md = (d) => `${d.getMonth() + 1}月${d.getDate()}日`;
+const mdShort = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
+function dayLabel(iso) {
+  const d = parseDate(iso);
+  const diff = Math.round((todayDate() - d) / DAY_MS);
+  if (diff === 0) return "今天";
+  if (diff === 1) return "昨天";
+  return d.getFullYear() === todayDate().getFullYear() ? md(d) : `${d.getFullYear()}年${md(d)}`;
+}
+const weekLabel = (p) => `${mdShort(parseDate(p.start))} – ${mdShort(parseDate(p.end))}`;
+const monthLabel = (p) => { const d = parseDate(p.start); return `${d.getFullYear()}年${d.getMonth() + 1}月`; };
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") node.className = v;
+    else if (k === "style") Object.assign(node.style, v);
+    else node.setAttribute(k, v);
+  }
+  node.append(...children);
+  return node;
+}
+function svgEl(tag, attrs = {}) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  return node;
+}
+
+// ---------- range ----------
+
+function rangeStart() {
+  const days = state.summary ? state.summary.days : [];
+  if (state.range === "all") return days.length ? parseDate(days[0].date) : addDays(todayDate(), -29);
+  return addDays(todayDate(), -(Number(state.range) - 1));
+}
+const inRange = (p) => parseDate(p.end || p.date) >= rangeStart();
+
+// ---------- header, banner, entry status ----------
+
+function renderHeader() {
+  const s = state.summary;
+  const messages = [];
+  if (state.config && state.config.demo) messages.push("演示模式：下面是模拟数据，新记的数据也不会保存。正式使用时去掉 --demo。");
+  if (state.error) messages.push(`连不上服务器：${state.error}`);
+  $("banner").hidden = messages.length === 0;
+  $("banner").textContent = messages.join(" ");
+
+  if (!s) return;
+  const n = state.entries ? state.entries.length : 0;
+  $("meta").textContent = s.days.length
+    ? `${s.days.length} 天有记录 · 共 ${n} 次称重 · 从 ${dayLabel(s.days[0].date)}开始`
+    : "还没有记录，先在下面记第一笔吧";
+
+  const status = $("form-status");
+  if (!status.dataset.sticky) {
+    const latest = s.latest;
+    status.textContent = latest && latest.date === isoDate(todayDate())
+      ? `今天已经记过：${latest.weight} ${latest.unit}${latest.time ? `（${latest.time}）` : ""}。`
+      : "今天还没有记录。";
+  }
+}
+
+function setUnitButtons() {
+  document.querySelectorAll("[data-unit]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.unit === unit())));
+  document.querySelectorAll("[data-entry-unit]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.entryUnit === (state.entryUnit || "lb"))));
+  document.querySelectorAll("[data-range]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.range === state.range)));
+  document.querySelectorAll("[data-grain]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.grain === state.grain)));
+}
+
+// ---------- tiles ----------
+
+function setTile(id, value, unitText, sub, sub2) {
+  const tile = $(id);
+  tile.querySelector(".v").textContent = value;
+  tile.querySelector(".unit").textContent = value === "–" ? "" : unitText;
+  tile.querySelector(".sub").textContent = sub || "";
+  tile.querySelector(".sub2").textContent = sub2 || "";
+}
+
+function changeText(change, vs) {
+  return change == null ? `${vs}没有记录，无法比较` : `比${vs} ${fmtSigned(change)} ${unitLabel()}`;
+}
+
+function renderTiles() {
+  const s = state.summary;
+  if (!s) return;
+  const u = unitLabel();
+  const today = todayDate();
+
+  const l = s.latest;
+  setTile("tile-latest", l ? fmtW(l.kg) : "–", u,
+    l ? `${dayLabel(l.date)}${l.time ? ` ${l.time}` : ""}` : "还没有记录",
+    l && l.unit !== unit() ? `秤上显示 ${l.weight} ${l.unit}` : "");
+
+  const week = s.weeks.find((p) => p.start === isoDate(weekStartOf(today)));
+  setTile("tile-week", week ? fmtW(week.avg) : "–", u,
+    week ? changeText(week.change, "上周") : "本周还没有记录",
+    week ? `本周 ${week.days} 天有记录` : "");
+
+  const month = s.months.find((p) => p.start === isoDate(new Date(today.getFullYear(), today.getMonth(), 1)));
+  setTile("tile-month", month ? fmtW(month.avg) : "–", u,
+    month ? changeText(month.change, "上月") : "本月还没有记录",
+    month ? `本月 ${month.days} 天有记录` : "");
+
+  const t = s.trend;
+  if (t) {
+    const flat = Math.abs(t.kg_per_week) < 0.1;  // under 0.1 kg (0.2 lb) a week is within the noise
+    const direction = flat ? "→ 基本持平" : t.kg_per_week < 0 ? "↓ 在下降" : "↑ 在上升";
+    const asOf = t.end === isoDate(today) ? "" : `，截至${dayLabel(t.end)}`;
+    setTile("tile-trend", fmtSigned(t.kg_per_week, 2), `${u}/周`, direction,
+      `约每月 ${fmtSigned(t.kg_per_week * 30 / 7)} ${u} · 依据 ${t.days} 天记录${asOf}`);
+  } else {
+    setTile("tile-trend", "–", "", "记录还不够", "最近 4 周里记满 4 天、跨度超过一周后显示");
+  }
+}
+
+// ---------- chart ----------
+
+function niceStep(span, target) {
+  const raw = span / target;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const n = raw / mag;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+}
+
+function yScale(values) {
+  let lo = Math.min(...values);
+  let hi = Math.max(...values);
+  const step = niceStep(Math.max(hi - lo, 1), 4);
+  lo = Math.floor(lo / step) * step;
+  hi = Math.ceil(hi / step) * step;
+  if (hi === lo) { lo -= step; hi += step; }
+  const ticks = [];
+  for (let v = lo; v <= hi + step / 2; v += step) ticks.push(Number(v.toFixed(6)));
+  return { lo, hi, ticks, step };
+}
+
+function timeTicks(t0, t1, maxTicks) {
+  const spanDays = (t1 - t0) / DAY_MS;
+  const ticks = [];
+  const dayStep = [1, 2, 7, 14].find((n) => spanDays / n <= maxTicks);
+  if (dayStep) {
+    // Weekly steps land on Mondays, so the ticks line up with the weekly averages.
+    let d = dayStep >= 7 ? weekStartOf(new Date(t0)) : new Date(t0);
+    for (; d.getTime() <= t1; d = addDays(d, dayStep)) {
+      if (d.getTime() >= t0) ticks.push({ t: d.getTime(), label: mdShort(d) });
+    }
+    return ticks;
+  }
+  const monthStep = [1, 2, 3, 6, 12].find((n) => spanDays / 30.4 / n <= maxTicks) || 12;
+  const start = new Date(t0);
+  for (let d = new Date(start.getFullYear(), start.getMonth(), 1); d.getTime() <= t1; d = new Date(d.getFullYear(), d.getMonth() + monthStep, 1)) {
+    if (d.getTime() >= t0) ticks.push({ t: d.getTime(), label: d.getMonth() === 0 ? `${d.getFullYear()}年` : `${d.getMonth() + 1}月` });
+  }
+  return ticks;
+}
+
+// One array of points for the chosen grain, each { t, start, end?, ...source }.
+function chartSeries() {
+  const s = state.summary;
+  if (state.grain === "day") {
+    return s.days.filter(inRange).map((d) => {
+      const start = parseDate(d.date).getTime();
+      return { ...d, start, end: start + DAY_MS, t: start + DAY_MS / 2, value: d.avg7 };
+    });
+  }
+  const list = state.grain === "week" ? s.weeks : s.months;
+  return list.filter(inRange).map((p) => {
+    const start = parseDate(p.start).getTime();
+    const end = addDays(parseDate(p.end), 1).getTime();
+    return { ...p, start, end, t: (start + end) / 2, value: p.avg };
+  });
+}
+
+function connected(a, b) {
+  // Don't draw a line across a stretch with no weigh-ins, as if there had been data there.
+  if (state.grain === "day") return b.start - a.start <= 7 * DAY_MS;
+  return Math.abs(b.start - a.end) < 2 * 3600e3;  // the next period starts where this one ends (DST-safe)
+}
+
+const chart = { geom: null };
+
+function renderChart() {
+  const host = $("chart");
+  host.replaceChildren();
+  chart.geom = null;
+  state.hover = null;
+  const s = state.summary;
+  const grain = state.grain;
+  $("legend").hidden = grain !== "day";
+  $("chart-title").textContent = { day: "每天体重", week: "每周平均体重", month: "每月平均体重" }[grain] + `（${unitLabel()}）`;
+  $("chart-hint").textContent = {
+    day: "灰点是当天的读数，会因为喝水、吃饭、出汗每天上下波动；蓝线是最近 7 天的平均，更能看出真实走向。",
+    week: "每个点是一周（周一到周日）每天读数的平均。",
+    month: "每个点是一个自然月每天读数的平均。",
+  }[grain];
+  if (!s) return;
+
+  const points = chartSeries();
+  if (!points.length) {
+    host.append(el("div", { class: "empty" }, s.days.length ? "这段时间没有记录，换个时间范围看看" : "记几天之后，这里会画出体重曲线"));
+    return;
+  }
+
+  const W = host.clientWidth;
+  const H = host.clientHeight;
+  const m = { top: 12, right: 52, bottom: 26, left: 44 };
+  const pw = W - m.left - m.right;
+  const ph = H - m.top - m.bottom;
+  if (pw <= 0 || ph <= 0) return;
+
+  const t0 = Math.min(rangeStart().getTime(), points[0].start);
+  const t1 = Math.max(addDays(todayDate(), 1).getTime(), points.at(-1).end);
+  const x = (t) => m.left + ((t - t0) / (t1 - t0)) * pw;
+  const lineValues = points.map((p) => toUnit(p.value));
+  const dotValues = grain === "day" ? points.map((p) => toUnit(p.kg)) : lineValues;
+  const ys = yScale([...lineValues, ...dotValues]);
+  const y = (v) => m.top + (1 - (v - ys.lo) / (ys.hi - ys.lo)) * ph;
+
+  const svg = svgEl("svg", {
+    width: W, height: H, viewBox: `0 0 ${W} ${H}`, tabindex: "0", role: "img", style: "touch-action: pan-y",
+    "aria-label": `${$("chart-title").textContent}曲线，可用左右方向键逐个查看；完整数据见下方表格`,
+  });
+
+  const decimals = ys.step < 1 ? 1 : 0;
+  for (const v of ys.ticks) {
+    svg.append(svgEl("line", { x1: m.left, x2: m.left + pw, y1: y(v), y2: y(v), stroke: "var(--grid)", "stroke-width": 1 }));
+    const label = svgEl("text", {
+      x: m.left - 8, y: y(v) + 4, "text-anchor": "end", fill: "var(--text-muted)", "font-size": 11,
+      style: "font-variant-numeric: tabular-nums",
+    });
+    label.textContent = v.toFixed(decimals);
+    svg.append(label);
+  }
+  svg.append(svgEl("line", { x1: m.left, x2: m.left + pw, y1: m.top + ph, y2: m.top + ph, stroke: "var(--axis)", "stroke-width": 1 }));
+  for (const tick of timeTicks(t0, t1, Math.max(3, Math.floor(pw / 64)))) {
+    const label = svgEl("text", {
+      x: x(tick.t), y: H - 6, "text-anchor": "middle", fill: "var(--text-muted)", "font-size": 11,
+      style: "font-variant-numeric: tabular-nums",
+    });
+    label.textContent = tick.label;
+    svg.append(label);
+  }
+
+  // Daily readings: small grey dots behind the average line.
+  if (grain === "day") {
+    const r = (t1 - t0) / DAY_MS > 120 ? 2.5 : 4;
+    for (let i = 0; i < points.length; i++) {
+      svg.append(svgEl("circle", {
+        cx: x(points[i].t), cy: y(dotValues[i]), r, fill: "var(--daily)", stroke: "var(--surface)", "stroke-width": r > 3 ? 2 : 1,
+      }));
+    }
+  }
+
+  let d = "";
+  points.forEach((p, i) => {
+    d += `${i === 0 || !connected(points[i - 1], p) ? "M" : "L"}${x(p.t).toFixed(1)},${y(lineValues[i]).toFixed(1)}`;
+  });
+  svg.append(svgEl("path", {
+    d, fill: "none", stroke: "var(--trend)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round",
+  }));
+  if (grain !== "day") {
+    points.forEach((p, i) => svg.append(svgEl("circle", {
+      cx: x(p.t), cy: y(lineValues[i]), r: 4, fill: "var(--trend)", stroke: "var(--surface)", "stroke-width": 2,
+    })));
+  }
+
+  // Label only the latest value, at the end of the line.
+  const last = points.length - 1;
+  const lx = x(points[last].t), ly = y(lineValues[last]);
+  svg.append(svgEl("circle", { cx: lx, cy: ly, r: 4, fill: "var(--trend)", stroke: "var(--surface)", "stroke-width": 2 }));
+  const endLabel = svgEl("text", {
+    x: lx + 8, y: ly + 4, fill: "var(--text-secondary)", "font-size": 12, "font-weight": 600,
+    style: "font-variant-numeric: tabular-nums",
+  });
+  endLabel.textContent = lineValues[last].toFixed(1);
+  svg.append(endLabel);
+
+  const cross = svgEl("g", { "pointer-events": "none" });
+  svg.append(cross);
+
+  const hit = svgEl("rect", { x: m.left, y: 0, width: pw, height: m.top + ph, fill: "transparent" });
+  const track = (e) => {
+    const box = svg.getBoundingClientRect();
+    const t = t0 + ((e.clientX - box.left - m.left) / pw) * (t1 - t0);
+    let best = 0;
+    points.forEach((p, i) => { if (Math.abs(p.t - t) < Math.abs(points[best].t - t)) best = i; });
+    setHover(best);
+  };
+  hit.addEventListener("pointermove", track);
+  hit.addEventListener("pointerdown", track);
+  hit.addEventListener("pointerleave", () => setHover(null));
+  svg.append(hit);
+
+  svg.addEventListener("focus", () => setHover(state.hover ?? last));
+  svg.addEventListener("blur", () => setHover(null));
+  svg.addEventListener("keydown", (e) => {
+    const step = { ArrowLeft: -1, ArrowRight: 1, Home: -Infinity, End: Infinity }[e.key];
+    if (step === undefined) return;
+    e.preventDefault();
+    setHover(Math.min(last, Math.max(0, (state.hover ?? last) + step)));
+  });
+
+  host.append(svg);
+  chart.geom = { x, y, m, ph, W, cross, host, points, lineValues, dotValues };
+}
+
+function setHover(index) {
+  state.hover = index;
+  const g = chart.geom;
+  if (!g) return;
+  g.cross.replaceChildren();
+  g.host.querySelector(".tooltip")?.remove();
+  if (index == null) return;
+
+  const p = g.points[index];
+  const cx = g.x(p.t);
+  const u = unitLabel();
+  g.cross.append(svgEl("line", { x1: cx, x2: cx, y1: g.m.top, y2: g.m.top + g.ph, stroke: "var(--text-muted)", "stroke-width": 1 }));
+  if (state.grain === "day") {
+    g.cross.append(svgEl("circle", { cx, cy: g.y(g.dotValues[index]), r: 5, fill: "var(--daily)", stroke: "var(--surface)", "stroke-width": 2 }));
+  }
+  g.cross.append(svgEl("circle", { cx, cy: g.y(g.lineValues[index]), r: 5, fill: "var(--trend)", stroke: "var(--surface)", "stroke-width": 2 }));
+
+  const row = (keyClass, color, value, name) =>
+    el("div", { class: "row" }, el("span", { class: keyClass, style: { background: color } }), el("strong", {}, `${value} ${u}`), el("span", { class: "muted" }, name));
+  let tip;
+  if (state.grain === "day") {
+    const date = parseDate(p.date);
+    tip = el("div", { class: "tooltip" },
+      el("div", { class: "when" }, `${dayLabel(p.date)} 周${WEEKDAYS[date.getDay()]}`),
+      row("key dot", "var(--daily)", fmtW(p.kg), p.n > 1 ? `当天（${p.n} 次平均）` : "当天"),
+      row("key", "var(--trend)", fmtW(p.avg7), "7 天平均"));
+  } else {
+    tip = el("div", { class: "tooltip" },
+      el("div", { class: "when" }, state.grain === "week" ? weekLabel(p) : monthLabel(p)),
+      row("key", "var(--trend)", fmtW(p.avg), state.grain === "week" ? "周平均" : "月平均"),
+      el("div", { class: "extra" }, `${p.days} 天有记录 · 最低 ${fmtW(p.min)} · 最高 ${fmtW(p.max)}`));
+  }
+  g.host.append(tip);
+  const left = cx + 12 + tip.offsetWidth > g.W ? cx - 12 - tip.offsetWidth : cx + 12;
+  tip.style.left = `${Math.max(0, left)}px`;
+}
+
+// ---------- tables ----------
+
+function periodTable(hostId, list, label, vs) {
+  const rows = list.filter(inRange).reverse();
+  const host = $(hostId);
+  if (!rows.length) {
+    host.replaceChildren(el("div", { class: "table-empty" }, "所选时间范围内没有记录"));
+    return;
+  }
+  const u = unitLabel();
+  host.replaceChildren(el("table", {},
+    el("thead", {}, el("tr", {},
+      el("th", {}, vs === "上周" ? "周" : "月份"), el("th", { class: "r" }, "天数"), el("th", { class: "r" }, `平均 (${u})`),
+      el("th", { class: "r" }, "最低–最高"), el("th", { class: "r" }, `比${vs}`))),
+    el("tbody", {}, ...rows.map((p) => el("tr", {},
+      el("td", {}, label(p)),
+      el("td", { class: "r" }, String(p.days)),
+      el("td", { class: "r" }, el("strong", {}, fmtW(p.avg))),
+      el("td", { class: "r secondary" }, `${fmtW(p.min)}–${fmtW(p.max)}`),
+      el("td", { class: "r secondary" }, p.change == null ? "–" : fmtSigned(p.change)))))));
+}
+
+function renderTables() {
+  const s = state.summary;
+  if (!s) return;
+  periodTable("weeks", s.weeks, weekLabel, "上周");
+  periodTable("months", s.months, monthLabel, "上月");
+}
+
+function renderEntries() {
+  const all = state.entries || [];
+  const rows = all.filter(inRange);
+  $("entries-summary").textContent = `每一条记录（所选范围内 ${rows.length} 条，共 ${all.length} 条）`;
+  if (!rows.length) {
+    $("entries").replaceChildren(el("div", { class: "table-empty" }, "所选时间范围内没有记录"));
+    return;
+  }
+  $("entries").replaceChildren(el("table", {},
+    el("thead", {}, el("tr", {}, el("th", {}, "日期"), el("th", {}, "时间"), el("th", { class: "r" }, "秤上读数"),
+      el("th", { class: "r" }, unitLabel()), el("th", {}, "备注"), el("th", {}, ""))),
+    el("tbody", {}, ...rows.map((e) => {
+      const del = el("button", { class: "link", type: "button", title: "删除", "aria-label": `删除 ${e.date} 的记录` }, "✕");
+      del.addEventListener("click", () => deleteEntry(e));
+      return el("tr", {},
+        el("td", {}, `${e.date} 周${WEEKDAYS[parseDate(e.date).getDay()]}`),
+        el("td", { class: "secondary" }, e.time || "–"),
+        el("td", { class: "r" }, `${e.weight} ${e.unit}`),
+        el("td", { class: "r secondary" }, fmtW(e.kg)),
+        el("td", { class: "note" }, e.note),
+        el("td", {}, del));
+    }))));
+}
+
+// ---------- entry form ----------
+
+function resetDateInput() {
+  const input = $("entry-form").date;
+  const today = isoDate(todayDate());
+  input.max = today;
+  if (!input.value || input.dataset.auto === "1") { input.value = today; input.dataset.auto = "1"; }
+}
+
+async function submitEntry(e) {
+  e.preventDefault();
+  const form = e.target;
+  const status = $("form-status");
+  const weight = Number(form.weight.value);
+  const entryUnit = state.entryUnit || "lb";
+  const date = form.date.value;
+  const kg = toKg(weight, entryUnit);
+
+  // 5% off the 7-day average around that date is far beyond a day's water swing:
+  // probably a typo or the wrong unit.
+  const distance = (d) => Math.abs(parseDate(d.date) - parseDate(date));
+  const near = (state.summary ? state.summary.days : []).reduce((best, d) => (!best || distance(d) < distance(best) ? d : best), null);
+  if (near && Math.abs(kg - near.avg7) / near.avg7 > 0.05) {
+    const asEntered = (k) => `${(entryUnit === "lb" ? k / KG_PER_LB : k).toFixed(1)} ${entryUnit}`;
+    if (!confirm(`${weight} ${entryUnit} 和${dayLabel(near.date)}的 7 天平均（${asEntered(near.avg7)}）相差比较大。确定没有输错、单位也没选错吗？`)) return;
+  }
+
+  const now = new Date();
+  const body = {
+    date, weight, unit: entryUnit, note: form.note.value.trim(),
+    time: date === isoDate(todayDate()) ? `${pad(now.getHours())}:${pad(now.getMinutes())}` : null,
+  };
+  try {
+    await api("/api/entries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    status.textContent = `✓ 已记录：${weight} ${entryUnit}（${dayLabel(date)}）`;
+    status.dataset.sticky = "1";
+    form.weight.value = "";
+    form.note.value = "";
+    form.date.dataset.auto = "1";
+    resetDateInput();
+    await refresh();
+  } catch (err) {
+    status.textContent = err.message;
+    status.dataset.sticky = "1";
+  }
+}
+
+async function deleteEntry(e) {
+  if (!confirm(`删除 ${e.date} 的记录 ${e.weight} ${e.unit}？`)) return;
+  try {
+    await api(`/api/entries/${e.id}`, { method: "DELETE" });
+    await refresh();
+  } catch (err) {
+    $("form-status").textContent = err.message;
+  }
+}
+
+// ---------- import ----------
+
+async function importFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const status = $("io-status");
+  status.textContent = `正在导入 ${file.name}…`;
+  try {
+    const r = await api(`/api/import?unit=${$("import-unit").value}`, { method: "POST", headers: { "Content-Type": "text/csv" }, body: file });
+    const parts = [`新增 ${r.added} 条`];
+    if (r.duplicates) parts.push(`跳过已有的 ${r.duplicates} 条`);
+    if (r.error_count) parts.push(`${r.error_count} 行没能导入`);
+    status.replaceChildren(`导入完成：${parts.join("，")}。`);
+    if (r.errors.length) {
+      status.append(el("ul", {}, ...r.errors.map((msg) => el("li", {}, msg))));
+      if (r.error_count > r.errors.length) status.append(el("div", { class: "muted" }, `……只列出前 ${r.errors.length} 个问题`));
+    }
+    await refresh();
+  } catch (err) {
+    status.textContent = `导入失败：${err.message}`;
+  }
+  e.target.value = "";
+}
+
+// ---------- data loading ----------
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+  return body;
+}
+
+async function refresh() {
+  try {
+    const [summary, entries] = await Promise.all([api("/api/summary"), api("/api/entries")]);
+    state.summary = summary;
+    state.entries = entries.entries;
+    state.error = null;
+    // Until the viewer picks, show and enter weights in the unit their scale is set to.
+    if (!state.entryUnit && summary.latest) state.entryUnit = summary.latest.unit;
+  } catch (err) {
+    state.error = err.message;
+  }
+  renderAll();
+}
+
+function renderAll() {
+  setUnitButtons();
+  resetDateInput();
+  renderHeader();
+  renderTiles();
+  renderChart();
+  renderTables();
+  renderEntries();
+}
+
+document.querySelectorAll("[data-unit]").forEach((b) => b.addEventListener("click", () => {
+  state.unit = b.dataset.unit;
+  savePref("unit", state.unit);
+  renderAll();
+}));
+document.querySelectorAll("[data-entry-unit]").forEach((b) => b.addEventListener("click", () => {
+  state.entryUnit = b.dataset.entryUnit;
+  savePref("entryUnit", state.entryUnit);
+  setUnitButtons();
+  if (!state.unit) renderAll();
+}));
+document.querySelectorAll("[data-range]").forEach((b) => b.addEventListener("click", () => {
+  state.range = b.dataset.range;
+  savePref("range", state.range);
+  renderAll();
+}));
+document.querySelectorAll("[data-grain]").forEach((b) => b.addEventListener("click", () => {
+  state.grain = b.dataset.grain;
+  savePref("grain", state.grain);
+  setUnitButtons();
+  renderChart();
+}));
+$("entry-form").addEventListener("submit", submitEntry);
+$("entry-form").date.addEventListener("input", (e) => { e.target.dataset.auto = e.target.value === isoDate(todayDate()) ? "1" : "0"; });
+$("entry-form").weight.addEventListener("input", () => { delete $("form-status").dataset.sticky; });
+$("import-file").addEventListener("change", importFile);
+// Coming back to the tab (e.g. after logging on the phone) picks up new entries and a new day.
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+
+let resizeFrame = 0;
+new ResizeObserver(() => {
+  cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(renderChart);
+}).observe($("chart"));
+
+(async function start() {
+  try {
+    state.config = await api("/api/config");
+  } catch (err) {
+    state.error = err.message;
+  }
+  await refresh();
+})();
+</script>
+</body>
+</html>
