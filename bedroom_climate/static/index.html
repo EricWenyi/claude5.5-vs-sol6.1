@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>卧室温湿度</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --band: rgba(11, 11, 11, 0.045);
+    --hover: rgba(11, 11, 11, 0.05);
+    --accent: #2a78d6;
+    --temp: #eb6834;
+    --hum: #2a78d6;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --serious: #ec835a;
+    --critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --band: rgba(255, 255, 255, 0.06);
+      --hover: rgba(255, 255, 255, 0.06);
+      --accent: #3987e5;
+      --temp: #d95926;
+      --hum: #3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --band: rgba(255, 255, 255, 0.06);
+    --hover: rgba(255, 255, 255, 0.06);
+    --accent: #3987e5;
+    --temp: #d95926;
+    --hum: #3987e5;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .secondary { color: var(--text-secondary); }
+  .muted { color: var(--text-muted); }
+  .num { font-variant-numeric: tabular-nums; }
+  .nowrap { white-space: nowrap; }
+
+  .top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .meta { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+
+  .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; padding: 2px; background: var(--surface); }
+  .segmented button {
+    font: inherit; font-size: 13px; color: var(--text-secondary); background: none;
+    border: 0; border-radius: 6px; padding: 4px 12px; cursor: pointer; min-height: 30px;
+  }
+  .segmented button:hover { background: var(--hover); }
+  .segmented button[aria-pressed="true"] { background: var(--text-primary); color: var(--surface); }
+
+  .banner {
+    margin-top: 16px; padding: 10px 14px; border-radius: 8px; font-size: 13px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary);
+    display: flex; gap: 8px; align-items: center;
+  }
+  .banner[hidden] { display: none; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; }
+
+  .now { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+  .tile .label { font-size: 13px; color: var(--text-secondary); }
+  .tile .value { font-size: clamp(36px, 10vw, 56px); font-weight: 600; line-height: 1.15; margin: 4px 0 8px; }
+  .tile .value .unit { font-size: 0.42em; font-weight: 500; color: var(--text-secondary); margin-left: 2px; }
+  .tile.stale .value { color: var(--text-muted); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; }
+  .chip .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .tile .hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  .filters { display: flex; align-items: center; gap: 12px; margin: 28px 0 12px; flex-wrap: wrap; }
+
+  .chart-card { margin-top: 12px; }
+  .chart-card header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; }
+  .chart-card .summary { font-size: 13px; color: var(--text-secondary); }
+  .chart-card .hint { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .chart { position: relative; height: 232px; margin-top: 8px; transition: opacity 0.15s; }
+  .chart.loading { opacity: 0.5; }
+  .chart svg { display: block; overflow: visible; }
+  .chart svg:focus { outline: none; }
+  .chart svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+  .chart .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-muted); font-size: 13px; }
+  .tooltip {
+    position: absolute; top: 4px; pointer-events: none; z-index: 2;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 8px 10px; font-size: 12px; white-space: nowrap;
+  }
+  .tooltip .when { color: var(--text-muted); margin-bottom: 4px; }
+  .tooltip .row { display: flex; align-items: center; gap: 8px; }
+  .tooltip .key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+  .tooltip strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  details.card { margin-top: 12px; padding: 0; }
+  details summary { cursor: pointer; padding: 12px 20px; font-size: 13px; color: var(--text-secondary); }
+  .table-wrap { max-height: 320px; overflow: auto; border-top: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 20px 6px 0; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { padding-left: 20px; }
+  th { font-weight: 500; color: var(--text-secondary); position: sticky; top: 0; background: var(--surface); }
+
+  .checks { margin-top: 28px; }
+  .checks .intro { font-size: 13px; color: var(--text-secondary); margin-top: 4px; max-width: 64ch; }
+  form.check-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 14px; }
+  form.check-form label { display: grid; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+  form.check-form input {
+    font: inherit; width: 110px; padding: 6px 10px; border-radius: 8px; min-height: 34px;
+    border: 1px solid var(--axis); background: var(--page); color: var(--text-primary);
+  }
+  button.primary {
+    font: inherit; font-weight: 500; padding: 6px 16px; border-radius: 8px; border: 0; min-height: 34px;
+    background: var(--text-primary); color: var(--surface); cursor: pointer;
+  }
+  button.link { font: inherit; font-size: 12px; background: none; border: 0; color: var(--text-muted); cursor: pointer; padding: 2px 4px; }
+  button.link:hover { color: var(--critical); }
+  .form-status { font-size: 13px; min-height: 20px; margin-top: 8px; color: var(--text-secondary); }
+  .verdict { margin-top: 14px; font-size: 13px; display: grid; gap: 4px; }
+  .verdict .chip { font-size: 14px; }
+  .checks .table-wrap { border-top: 0; margin: 12px -20px -16px; }
+  .checks table th { border-top: 1px solid var(--border); }
+  .checks td { white-space: nowrap; vertical-align: top; }
+
+  footer { margin-top: 28px; font-size: 12px; color: var(--text-muted); display: grid; gap: 4px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.95em; }
+
+  @media (max-width: 520px) {
+    .card { padding: 14px 16px; }
+    th, td { padding-right: 12px; }
+    th:first-child, td:first-child { padding-left: 16px; }
+    .checks .table-wrap { margin: 12px -16px -14px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div>
+      <h1>卧室温湿度</h1>
+      <div class="meta" id="meta">正在连接…</div>
+    </div>
+    <div class="segmented" role="group" aria-label="温度单位">
+      <button type="button" data-unit="C">°C</button>
+      <button type="button" data-unit="F">°F</button>
+    </div>
+  </div>
+
+  <div class="banner" id="banner" role="status" hidden></div>
+
+  <section class="now" aria-label="当前读数">
+    <div class="card tile" id="tile-temp">
+      <div class="label">温度</div>
+      <div class="value"><span class="v">–</span><span class="unit"></span></div>
+      <div class="chip"><span class="dot"></span><span class="text"></span></div>
+      <div class="hint"></div>
+    </div>
+    <div class="card tile" id="tile-hum">
+      <div class="label">相对湿度</div>
+      <div class="value"><span class="v">–</span><span class="unit">%</span></div>
+      <div class="chip"><span class="dot"></span><span class="text"></span></div>
+      <div class="hint"></div>
+    </div>
+  </section>
+
+  <div class="filters">
+    <div class="segmented" role="group" aria-label="时间范围" id="ranges">
+      <button type="button" data-hours="6">6 小时</button>
+      <button type="button" data-hours="24">24 小时</button>
+      <button type="button" data-hours="168">7 天</button>
+      <button type="button" data-hours="720">30 天</button>
+    </div>
+  </div>
+
+  <section class="card chart-card">
+    <header>
+      <h2>温度</h2>
+      <div class="summary num" id="summary-temp"></div>
+    </header>
+    <div class="hint" id="band-temp"></div>
+    <div class="chart" id="chart-temp"></div>
+  </section>
+
+  <section class="card chart-card">
+    <header>
+      <h2>相对湿度</h2>
+      <div class="summary num" id="summary-hum"></div>
+    </header>
+    <div class="hint" id="band-hum"></div>
+    <div class="chart" id="chart-hum"></div>
+  </section>
+
+  <details class="card">
+    <summary>数据表</summary>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>时间</th><th id="th-temp">温度</th><th>湿度</th></tr></thead>
+        <tbody id="history-rows"></tbody>
+      </table>
+    </div>
+  </details>
+
+  <section class="card checks" aria-labelledby="checks-title">
+    <h2 id="checks-title">与 AcuRite 对比</h2>
+    <p class="intro">AcuRite 01083M 没有蓝牙或 Wi‑Fi，读数只能看屏幕。把两台放在一起 30 分钟以上，再把 AcuRite 屏幕上的数字填进来，系统会和同一时刻的 Govee 读数配对，看两台是否一致。</p>
+    <form class="check-form" id="check-form">
+      <label><span>AcuRite 温度 (<span class="unit-label">°C</span>)</span>
+        <input name="temp" type="number" step="0.1" inputmode="decimal" required>
+      </label>
+      <label><span>AcuRite 湿度 (%)</span>
+        <input name="humidity" type="number" step="1" min="0" max="100" inputmode="numeric" required>
+      </label>
+      <button class="primary" type="submit">记录对比</button>
+    </form>
+    <div class="form-status" id="form-status" aria-live="polite"></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="table-wrap" id="checks-table" hidden>
+      <table>
+        <thead><tr><th>时间</th><th>AcuRite</th><th>Govee</th><th>Govee − AcuRite</th><th></th></tr></thead>
+        <tbody id="check-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <div id="offsets"></div>
+    <div>数据来自 Govee H5075 的蓝牙广播，每分钟记录一次。</div>
+  </footer>
+</main>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function loadPref(key, fallback, allowed) {
+  try {
+    const v = localStorage.getItem(key);
+    return allowed.includes(v) ? v : fallback;
+  } catch { return fallback; }
+}
+function savePref(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* private mode */ }
+}
+
+const state = {
+  unit: loadPref("unit", "C", ["C", "F"]),
+  hours: Number(loadPref("hours", "24", ["6", "24", "168", "720"])),
+  config: null,
+  latest: null,
+  history: null,
+  checks: null,
+  hover: null,
+};
+
+// ---------- units & formatting ----------
+
+const toUnit = (c) => (state.unit === "F" ? c * 9 / 5 + 32 : c);
+const deltaToUnit = (dc) => (state.unit === "F" ? dc * 9 / 5 : dc);
+const fromUnit = (v) => (state.unit === "F" ? (v - 32) * 5 / 9 : v);
+const unitLabel = () => (state.unit === "F" ? "°F" : "°C");
+const fmtTemp = (c) => toUnit(c).toFixed(1);
+const fmtHum = (h) => h.toFixed(1);
+function fmtSigned(v) {
+  const r = Math.round(v * 10) / 10;
+  if (r === 0) return "0.0";
+  return (r > 0 ? "+" : "−") + Math.abs(r).toFixed(1);
+}
+
+const timeFmt = new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+const dateFmt = new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" });
+const dateTimeFmt = new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+
+function ago(seconds) {
+  if (seconds < 60) return `${Math.max(0, Math.round(seconds))} 秒前`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} 分钟前`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)} 小时前`;
+  return `${Math.round(seconds / 86400)} 天前`;
+}
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") node.className = v;
+    else if (k === "style") Object.assign(node.style, v);
+    else node.setAttribute(k, v);
+  }
+  node.append(...children);
+  return node;
+}
+function svgEl(tag, attrs = {}) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  return node;
+}
+
+// ---------- comfort status ----------
+
+function tempStatus(c) {
+  const [lo, hi] = state.config.temp_range_c;
+  if (c < lo) return { level: "warning", text: "↓ 偏冷" };
+  if (c > hi) return { level: "warning", text: "↑ 偏暖" };
+  return { level: "good", text: "✓ 适合睡眠" };
+}
+function humidityStatus(h) {
+  const [lo, hi] = state.config.humidity_range;
+  if (h > Math.max(hi, 60)) return { level: "serious", text: "↑ 过湿，容易滋生霉菌" };
+  if (h > hi) return { level: "warning", text: "↑ 偏湿" };
+  if (h < lo) return { level: "warning", text: "↓ 偏干" };
+  return { level: "good", text: "✓ 舒适" };
+}
+function setChip(chip, status) {
+  chip.querySelector(".dot").style.background = status ? `var(--${status.level})` : "transparent";
+  chip.querySelector(".text").textContent = status ? status.text : "";
+}
+
+// ---------- header, banner, tiles ----------
+
+function renderNow() {
+  const l = state.latest;
+  const cfg = state.config;
+  const banner = $("banner");
+  const messages = [];
+  if (cfg && cfg.demo) messages.push("演示模式：下面是模拟数据，不是真实读数。");
+  if (!l || l.status === "waiting") messages.push("正在等待 Govee H5075 的蓝牙广播…第一次可能需要一分钟。");
+  else if (l.status === "error") messages.push(`连不上服务器：${l.error}`);
+  else if (l.status === "stale") messages.push(`传感器最后一次信号在 ${ago(l.age_s)}。检查电池，或把运行本程序的电脑放近一点。`);
+  banner.hidden = messages.length === 0;
+  banner.textContent = messages.join(" ");
+
+  const live = l && (l.status === "ok" || l.status === "stale");
+  if (live) {
+    const parts = [l.device];
+    if (l.battery != null) parts.push(`电量 ${l.battery}%`);
+    if (l.rssi != null) parts.push(`信号 ${l.rssi} dBm`);
+    const age = l.age_s + (Date.now() - state.latestFetchedAt) / 1000;
+    parts.push(`${ago(age)}更新`);
+    $("meta").replaceChildren(...parts.flatMap((part, i) => [i ? " · " : "", el("span", { class: "nowrap" }, part)]));
+  } else {
+    $("meta").textContent = "Govee H5075";
+  }
+
+  const tTile = $("tile-temp");
+  const hTile = $("tile-hum");
+  tTile.classList.toggle("stale", !live || l.status === "stale");
+  hTile.classList.toggle("stale", !live || l.status === "stale");
+  tTile.querySelector(".unit").textContent = unitLabel();
+  tTile.querySelector(".v").textContent = live ? fmtTemp(l.temp_c) : "–";
+  hTile.querySelector(".v").textContent = live ? fmtHum(l.humidity) : "–";
+  setChip(tTile.querySelector(".chip"), live && cfg ? tempStatus(l.temp_c) : null);
+  setChip(hTile.querySelector(".chip"), live && cfg ? humidityStatus(l.humidity) : null);
+  if (cfg) {
+    const [tlo, thi] = cfg.temp_range_c;
+    const [hlo, hhi] = cfg.humidity_range;
+    tTile.querySelector(".hint").textContent = `睡眠建议 ${fmtTemp(tlo)}–${fmtTemp(thi)} ${unitLabel()}`;
+    hTile.querySelector(".hint").textContent = `建议 ${hlo}–${hhi}%`;
+  }
+}
+
+// ---------- charts ----------
+
+const CHARTS = [
+  {
+    id: "chart-temp", index: 1, color: "var(--temp)", name: "温度",
+    value: (c) => toUnit(c),
+    band: () => state.config.temp_range_c.map(toUnit),
+    fmt: (v) => `${v.toFixed(1)}${unitLabel()}`,
+  },
+  {
+    id: "chart-hum", index: 2, color: "var(--hum)", name: "湿度",
+    value: (h) => h,
+    band: () => state.config.humidity_range,
+    fmt: (v) => `${v.toFixed(1)}%`,
+  },
+];
+
+function niceStep(span, target) {
+  const raw = span / target;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const n = raw / mag;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+}
+
+function yScale(values, band) {
+  // Always include the comfort band, so the reader sees how far off target the room is.
+  let lo = Math.min(band[0], ...values);
+  let hi = Math.max(band[1], ...values);
+  const step = niceStep(hi - lo || 1, 4);
+  lo = Math.floor(lo / step) * step;
+  hi = Math.ceil(hi / step) * step;
+  if (hi === lo) hi = lo + step;
+  const ticks = [];
+  for (let v = lo; v <= hi + step / 2; v += step) ticks.push(Number(v.toFixed(6)));
+  return { lo, hi, ticks, step };
+}
+
+const HOUR = 3600e3, DAY = 86400e3;
+const TIME_STEPS = [[1, "h"], [2, "h"], [3, "h"], [6, "h"], [12, "h"], [1, "d"], [2, "d"], [5, "d"], [7, "d"], [14, "d"]];
+
+function timeTicks(t0, t1, maxTicks) {
+  const [n, unit] = TIME_STEPS.find(([n, u]) => (t1 - t0) / (n * (u === "h" ? HOUR : DAY)) <= maxTicks) || TIME_STEPS.at(-1);
+  // Step from local midnight with Date arithmetic so ticks stay on round hours across DST changes.
+  const d = new Date(t0);
+  d.setHours(0, 0, 0, 0);
+  const ticks = [];
+  while (d.getTime() <= t1) {
+    const t = d.getTime();
+    if (t >= t0) {
+      const midnight = d.getHours() === 0;
+      ticks.push({ t, label: unit === "d" || midnight ? dateFmt.format(d) : timeFmt.format(d) });
+    }
+    if (unit === "h") d.setHours(d.getHours() + n);
+    else d.setDate(d.getDate() + n);
+  }
+  return ticks;
+}
+
+function nearestIndex(points, t) {
+  let lo = 0, hi = points.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (points[mid][0] * 1000 < t) lo = mid; else hi = mid;
+  }
+  return Math.abs(points[lo][0] * 1000 - t) <= Math.abs(points[hi][0] * 1000 - t) ? lo : hi;
+}
+
+function renderChart(chart) {
+  const host = $(chart.id);
+  host.replaceChildren();
+  chart.geom = null;
+  const h = state.history;
+  if (!h || !state.config) return;
+  const points = h.points;
+  if (!points.length) {
+    host.append(el("div", { class: "empty" }, "这段时间还没有数据"));
+    return;
+  }
+
+  const W = host.clientWidth;
+  const H = host.clientHeight;
+  const m = { top: 10, right: 14, bottom: 26, left: 40 };
+  const pw = W - m.left - m.right;
+  const ph = H - m.top - m.bottom;
+  if (pw <= 0 || ph <= 0) return; // not laid out yet
+  const t1 = h.fetchedAt;
+  const t0 = h.since * 1000;
+  const x = (t) => m.left + ((t - t0) / (t1 - t0)) * pw;
+  const values = points.map((p) => chart.value(p[chart.index]));
+  const band = chart.band();
+  const ys = yScale(values, band);
+  const y = (v) => m.top + (1 - (v - ys.lo) / (ys.hi - ys.lo)) * ph;
+
+  const svg = svgEl("svg", {
+    width: W, height: H, viewBox: `0 0 ${W} ${H}`, tabindex: "0", role: "img", style: "touch-action: pan-y",
+    "aria-label": `${chart.name}曲线，可用左右方向键查看各时间点读数；完整数据见下方数据表`,
+  });
+
+  svg.append(svgEl("rect", {
+    x: m.left, width: pw, y: y(band[1]), height: Math.max(0, y(band[0]) - y(band[1])), fill: "var(--band)",
+  }));
+
+  const decimals = ys.step < 1 ? 1 : 0;
+  for (const v of ys.ticks) {
+    svg.append(svgEl("line", { x1: m.left, x2: m.left + pw, y1: y(v), y2: y(v), stroke: "var(--grid)", "stroke-width": 1 }));
+    const label = svgEl("text", {
+      x: m.left - 8, y: y(v) + 4, "text-anchor": "end", fill: "var(--text-muted)", "font-size": 11,
+      style: "font-variant-numeric: tabular-nums",
+    });
+    label.textContent = v.toFixed(decimals);
+    svg.append(label);
+  }
+  svg.append(svgEl("line", {
+    x1: m.left, x2: m.left + pw, y1: m.top + ph, y2: m.top + ph, stroke: "var(--axis)", "stroke-width": 1,
+  }));
+
+  for (const tick of timeTicks(t0, t1, Math.max(3, Math.floor(pw / 60)))) {
+    const label = svgEl("text", {
+      x: x(tick.t), y: H - 6, "text-anchor": "middle", fill: "var(--text-muted)", "font-size": 11,
+      style: "font-variant-numeric: tabular-nums",
+    });
+    label.textContent = tick.label;
+    svg.append(label);
+  }
+
+  // Break the line where the collector was offline instead of drawing across the gap.
+  const maxGap = h.bucket * 1000 * 2.5;
+  let d = "";
+  let prev = null;
+  points.forEach((p, i) => {
+    const t = p[0] * 1000;
+    d += `${prev === null || t - prev > maxGap ? "M" : "L"}${x(t).toFixed(1)},${y(values[i]).toFixed(1)}`;
+    prev = t;
+  });
+  svg.append(svgEl("path", {
+    d, fill: "none", stroke: chart.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round",
+  }));
+
+  const last = points.length - 1;
+  svg.append(svgEl("circle", {
+    cx: x(points[last][0] * 1000), cy: y(values[last]), r: 4, fill: chart.color, stroke: "var(--surface)", "stroke-width": 2,
+  }));
+
+  const cross = svgEl("g", { "pointer-events": "none" });
+  svg.append(cross);
+
+  const hit = svgEl("rect", { x: m.left, y: 0, width: pw, height: m.top + ph, fill: "transparent" });
+  const track = (e) => {
+    const box = svg.getBoundingClientRect();
+    const t = t0 + ((e.clientX - box.left - m.left) / pw) * (t1 - t0);
+    setHover(nearestIndex(points, t), chart);
+  };
+  hit.addEventListener("pointermove", track);
+  hit.addEventListener("pointerdown", track);
+  hit.addEventListener("pointerleave", () => setHover(null));
+  svg.append(hit);
+
+  svg.addEventListener("focus", () => setHover(state.hover ?? last, chart));
+  svg.addEventListener("blur", () => setHover(null));
+  svg.addEventListener("keydown", (e) => {
+    const step = { ArrowLeft: -1, ArrowRight: 1, Home: -Infinity, End: Infinity }[e.key];
+    if (step === undefined) return;
+    e.preventDefault();
+    setHover(Math.min(last, Math.max(0, (state.hover ?? last) + step)), chart);
+  });
+
+  host.append(svg);
+  chart.geom = { x, y, m, ph, W, cross, values, host };
+}
+
+function setHover(index, source) {
+  state.hover = index;
+  for (const chart of CHARTS) {
+    if (!chart.geom) continue;
+    const { x, y, m, ph, W, cross, values, host } = chart.geom;
+    cross.replaceChildren();
+    host.querySelector(".tooltip")?.remove();
+    if (index == null) continue;
+
+    const p = state.history.points[index];
+    const cx = x(p[0] * 1000);
+    cross.append(svgEl("line", { x1: cx, x2: cx, y1: m.top, y2: m.top + ph, stroke: "var(--text-muted)", "stroke-width": 1 }));
+    cross.append(svgEl("circle", {
+      cx, cy: y(values[index]), r: 4, fill: chart.color, stroke: "var(--surface)", "stroke-width": 2,
+    }));
+
+    if (chart !== source) continue;
+    const row = (c, valueText, name) =>
+      el("div", { class: "row" }, el("span", { class: "key", style: { background: c.color } }), el("strong", {}, valueText), el("span", { class: "muted" }, name));
+    const tip = el("div", { class: "tooltip" },
+      el("div", { class: "when" }, dateTimeFmt.format(new Date(p[0] * 1000))),
+      row(CHARTS[0], CHARTS[0].fmt(CHARTS[0].value(p[1])), "温度"),
+      row(CHARTS[1], CHARTS[1].fmt(p[2]), "湿度"));
+    host.append(tip);
+    const left = cx + 12 + tip.offsetWidth > W ? cx - 12 - tip.offsetWidth : cx + 12;
+    tip.style.left = `${Math.max(0, left)}px`;
+  }
+}
+
+function renderCharts() {
+  CHARTS.forEach(renderChart);
+  state.hover = null;
+
+  const cfg = state.config;
+  const stats = state.history && state.history.stats;
+  if (cfg) {
+    const [tlo, thi] = cfg.temp_range_c;
+    const [hlo, hhi] = cfg.humidity_range;
+    $("band-temp").textContent = `灰色区域：睡眠建议 ${fmtTemp(tlo)}–${fmtTemp(thi)} ${unitLabel()}`;
+    $("band-hum").textContent = `灰色区域：建议 ${hlo}–${hhi}%`;
+  }
+  if (stats) {
+    const t = stats.temp_c, hm = stats.humidity;
+    $("summary-temp").textContent = `最低 ${fmtTemp(t.min)} · 平均 ${fmtTemp(t.avg)} · 最高 ${fmtTemp(t.max)} ${unitLabel()}`;
+    $("summary-hum").textContent = `最低 ${fmtHum(hm.min)} · 平均 ${fmtHum(hm.avg)} · 最高 ${fmtHum(hm.max)}%`;
+  } else {
+    $("summary-temp").textContent = "";
+    $("summary-hum").textContent = "";
+  }
+}
+
+function renderTable() {
+  $("th-temp").textContent = `温度 (${unitLabel()})`;
+  const rows = (state.history ? state.history.points : []).slice().reverse().map((p) =>
+    el("tr", {}, el("td", {}, dateTimeFmt.format(new Date(p[0] * 1000))), el("td", {}, fmtTemp(p[1])), el("td", {}, `${fmtHum(p[2])}%`)));
+  $("history-rows").replaceChildren(...rows);
+}
+
+// ---------- reference checks (AcuRite) ----------
+
+function compareText(diff, unit) {
+  const r = Math.round(diff * 10) / 10;
+  if (r === 0) return "两台一致";
+  return `Govee 比 AcuRite ${r > 0 ? "高" : "低"} ${Math.abs(r).toFixed(1)} ${unit}`;
+}
+
+function renderChecks() {
+  document.querySelectorAll(".unit-label").forEach((n) => { n.textContent = unitLabel(); });
+  const data = state.checks;
+  const verdict = $("verdict");
+  verdict.replaceChildren();
+  if (!data || !state.config) return;
+
+  const { checks, summary } = data;
+  $("checks-table").hidden = checks.length === 0;
+  $("check-rows").replaceChildren(...checks.map((c) => {
+    const del = el("button", { class: "link", type: "button", "aria-label": "删除这条对比", title: "删除" }, "✕");
+    del.addEventListener("click", () => deleteCheck(c.id));
+    const pair = (t, h) => el("td", {}, el("div", {}, t), el("div", {}, h));
+    return el("tr", {},
+      el("td", {}, dateTimeFmt.format(new Date(c.ts * 1000))),
+      pair(`${fmtTemp(c.ref_temp_c)}${unitLabel()}`, `${fmtHum(c.ref_humidity)}%`),
+      pair(`${fmtTemp(c.sensor_temp_c)}${unitLabel()}`, `${fmtHum(c.sensor_humidity)}%`),
+      pair(`${fmtSigned(deltaToUnit(c.diff_temp_c))}${unitLabel()}`, `${fmtSigned(c.diff_humidity)}%`),
+      el("td", {}, del));
+  }));
+
+  if (!summary) {
+    verdict.append(el("div", { class: "muted" }, "还没有记录。"));
+    return;
+  }
+  const agree = state.config.agreement;
+  const ok = Math.abs(summary.mean_diff_temp_c) <= agree.temp_c && Math.abs(summary.mean_diff_humidity) <= agree.humidity;
+  const level = ok ? "good" : "warning";
+  const text = ok
+    ? "✓ 两台读数一致，差异在它们的标称误差之内"
+    : "⚠ 差异超出两台标称误差之和，至少有一台不准，建议做盐水测试（见 docs/accuracy.md）";
+  verdict.append(
+    el("div", { class: "chip" }, el("span", { class: "dot", style: { background: `var(--${level})` } }), el("span", {}, text)),
+    el("div", { class: "secondary num" },
+      `${summary.n} 次平均 — 温度：${compareText(deltaToUnit(summary.mean_diff_temp_c), unitLabel())}；` +
+      `湿度：${compareText(summary.mean_diff_humidity, "%")}。允许差异：温度 ±${deltaToUnit(agree.temp_c).toFixed(1)} ${unitLabel()}，湿度 ±${agree.humidity}%。`),
+  );
+  if (summary.n < 3) verdict.append(el("div", { class: "muted" }, "建议在一天里不同时间多记几次，平均值更可靠。"));
+}
+
+async function submitCheck(e) {
+  e.preventDefault();
+  const form = e.target;
+  const status = $("form-status");
+  const temp = Number(form.temp.value);
+  const humidity = Number(form.humidity.value);
+  try {
+    await api("/api/checks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ temp_c: Number(fromUnit(temp).toFixed(2)), humidity }),
+    });
+    status.textContent = "已记录。";
+    form.reset();
+    await refreshChecks();
+  } catch (err) {
+    status.textContent = err.message;
+  }
+}
+
+async function deleteCheck(id) {
+  try {
+    await api(`/api/checks/${id}`, { method: "DELETE" });
+    await refreshChecks();
+  } catch (err) {
+    $("form-status").textContent = err.message;
+  }
+}
+
+function renderFooter() {
+  const o = state.config && state.config.offsets;
+  if (!o) return;
+  const fmt = (v) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1);
+  $("offsets").textContent =
+    `校准偏移：温度 ${fmt(deltaToUnit(o.temp_c))} ${unitLabel()}，湿度 ${fmt(o.humidity)}%` +
+    "（启动参数 --temp-offset / --humidity-offset，已应用到全部读数和历史）";
+}
+
+// ---------- data loading ----------
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+  return body;
+}
+
+async function refreshLatest() {
+  try {
+    state.latest = await api("/api/latest");
+  } catch (err) {
+    state.latest = { status: "error", error: err.message };
+  }
+  state.latestFetchedAt = Date.now();
+  renderNow();
+}
+
+async function refreshHistory() {
+  CHARTS.forEach((c) => $(c.id).classList.add("loading"));
+  try {
+    const h = await api(`/api/history?hours=${state.hours}`);
+    h.fetchedAt = Date.now();
+    state.history = h;
+    renderCharts();
+    renderTable();
+  } catch { /* keep the previous render */ }
+  CHARTS.forEach((c) => $(c.id).classList.remove("loading"));
+}
+
+async function refreshChecks() {
+  try {
+    state.checks = await api("/api/checks");
+    renderChecks();
+  } catch { /* keep the previous render */ }
+}
+
+function renderAll() {
+  document.querySelectorAll("[data-unit]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.unit === state.unit)));
+  document.querySelectorAll("[data-hours]").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.hours) === state.hours)));
+  renderNow();
+  renderCharts();
+  renderTable();
+  renderChecks();
+  renderFooter();
+}
+
+document.querySelectorAll("[data-unit]").forEach((b) => b.addEventListener("click", () => {
+  state.unit = b.dataset.unit;
+  savePref("unit", state.unit);
+  renderAll();
+}));
+document.querySelectorAll("[data-hours]").forEach((b) => b.addEventListener("click", () => {
+  state.hours = Number(b.dataset.hours);
+  savePref("hours", String(state.hours));
+  renderAll();
+  refreshHistory();
+}));
+$("check-form").addEventListener("submit", submitCheck);
+
+let resizeFrame = 0;
+new ResizeObserver(() => {
+  cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(renderCharts);
+}).observe($("chart-temp"));
+
+(async function start() {
+  try {
+    state.config = await api("/api/config");
+  } catch (err) {
+    state.latest = { status: "error", error: err.message };
+  }
+  renderAll();
+  await Promise.all([refreshLatest(), refreshHistory(), refreshChecks()]);
+  setInterval(refreshLatest, 15000);
+  setInterval(refreshHistory, 60000);
+  setInterval(renderNow, 5000);
+})();
+</script>
+</body>
+</html>
