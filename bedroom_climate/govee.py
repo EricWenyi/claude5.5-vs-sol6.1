@@ -11,6 +11,15 @@ two company-ID bytes and hands us the remaining six:
 
 The H5072 uses the same layout. This matches the decoder in
 Bluetooth-Devices/govee-ble, which Home Assistant's Govee integration uses.
+
+macOS quirk (seen on a real H5075, macOS 26): the sensor also sends an Apple
+iBeacon (company 0x004C) in its other advertising packet, and CoreBluetooth
+reports both manufacturer blocks glued together as one value. Bleak then hands
+us the 6 Govee bytes followed by the iBeacon block, starting with 4C 00 02 15:
+
+    00 0351A7 64 00 | 4C 00 02 15 <16-byte UUID> <major> <minor> <tx power>
+
+So a payload longer than 6 bytes is accepted when the extra part is that iBeacon.
 """
 
 from __future__ import annotations
@@ -18,6 +27,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 GOVEE_COMPANY_ID = 0xEC88
+# Apple company ID (little-endian) + iBeacon type/length, as appended by CoreBluetooth.
+_IBEACON_PREFIX = bytes.fromhex("4c000215")
 
 # Same plausibility window govee-ble uses; anything outside is a garbled packet.
 MIN_TEMP_C = -40.0
@@ -33,6 +44,8 @@ class Reading:
 
 def decode_h5075(payload: bytes) -> Reading | None:
     """Decode one 0xEC88 manufacturer-data payload, or return None if it isn't valid H5075 data."""
+    if len(payload) > 6 and payload[6:10] == _IBEACON_PREFIX:
+        payload = payload[:6]
     if len(payload) != 6:
         return None
 

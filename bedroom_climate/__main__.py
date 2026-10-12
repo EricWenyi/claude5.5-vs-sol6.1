@@ -27,6 +27,7 @@ def _range(text: str) -> tuple[float, float]:
 def main() -> None:
     p = argparse.ArgumentParser(prog="python -m bedroom_climate", description=__doc__)
     p.add_argument("--scan", action="store_true", help="list nearby Govee H5075 sensors and exit")
+    p.add_argument("--scan-seconds", type=float, default=15, help="how long --scan listens (default: %(default)s)")
     p.add_argument("--demo", action="store_true", help="serve simulated data; no Bluetooth needed")
     p.add_argument("--device", help="sensor address or name (see --scan); default: first H5075 heard")
     p.add_argument("--db", default="climate.db", help="SQLite file (default: %(default)s)")
@@ -48,7 +49,7 @@ def main() -> None:
     if args.scan:
         from .collector import scan
 
-        asyncio.run(scan())
+        asyncio.run(scan(args.scan_seconds))
         return
 
     if args.demo:

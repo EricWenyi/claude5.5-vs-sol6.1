@@ -44,7 +44,7 @@ python -m bedroom_climate
 python -m bedroom_climate --device GVH5075_1A2B   # 名字的一部分也行，例如 --device 1A2B
 ```
 
-> **macOS**：第一次运行时系统会询问“终端”能否使用蓝牙，需要允许。macOS 不显示蓝牙 MAC 地址，`--scan` 里看到的是一串 UUID，用名字指定更方便。
+> **macOS**：从终端直接运行可能会因为蓝牙权限被系统杀掉（`Abort trap: 6`），请看下面的[在 Mac 上常驻](#在-mac-上常驻)。macOS 不显示蓝牙 MAC 地址，`--scan` 里看到的是一串 UUID，用名字指定更方便。
 
 ## 看板上有什么
 
@@ -112,6 +112,35 @@ WantedBy=multi-user.target
 sudo systemctl enable --now bedroom-climate
 journalctl -u bedroom-climate -f   # 查看日志
 ```
+
+## 在 Mac 上常驻
+
+已在 Mac mini（Apple 芯片，macOS 26.5，bleak 3.0.2）上实测。macOS 上有几处坑，`mac/step.sh` 都处理好了。每一步的输出也会存到 `mac/logs/<步骤>.log`：
+
+```bash
+mac/step.sh env                      # 找 Python ≥ 3.10，建 .venv，安装依赖，跑测试
+mac/step.sh app                      # 编译 mac/build/BedroomClimate.app（需要 Xcode 或命令行工具）
+mac/step.sh scan                     # 通过这个 App 扫描附近的 H5075，显示原始广播数据
+mac/step.sh agent-install 2186 app   # 装成 LaunchAgent：登录后自动运行，退出后自动重启
+mac/step.sh agent-status             # 是否在运行、最新读数、日志末尾
+mac/step.sh agent-restart            # launchctl kickstart -k 重启，并检查能否恢复
+mac/step.sh info                     # 局域网链接、防火墙和睡眠设置（只读）
+mac/step.sh agent-uninstall          # 停止并删除 LaunchAgent
+```
+
+`2186` 换成你的传感器名字的一部分（见 `scan` 的输出）。数据库在 `~/Library/Application Support/bedroom-climate/climate.db`，日志在 `~/Library/Logs/bedroom-climate.log`。每存一条读数，日志里就记一行 `Saved ...`，一天大约 150 KB，不会自动轮转，太大了可以直接清空：`: > ~/Library/Logs/bedroom-climate.log`。
+
+### 踩过的坑
+
+1. **在 Warp 里直接运行 `python -m bedroom_climate`，进程会被系统杀掉（`Abort trap: 6`）。** 一个进程想用蓝牙，macOS 要求对它“负责”的那个 App 在 Info.plist 里写有 `NSBluetoothAlwaysUsageDescription`，并且用户允许过；否则直接 SIGABRT。从终端启动时，负责的 App 是终端本身，而 Warp 没有这一项（iTerm2 有）。在 Warp 里直接执行 `.app` 里面的可执行文件也不行，负责的 App 仍然是 Warp。解决办法是用 `mac/launcher.c` 和 `mac/Info.plist` 编一个带蓝牙用途说明的小 App（ad-hoc 签名），再由它启动 python。前台运行时用 `open -W -n -g -a BedroomClimate.app --args ...`（`step.sh scan` 就是这样做的），后台由 launchd 直接启动这个 App。系统如果弹出蓝牙权限请求，点“允许”。
+2. **`--scan` 明明有信号，却显示 “No Govee H5075 found”。** H5075 在 Govee 自己的数据（公司 ID `0xEC88`）之外，另一个广播包里还带一段 Apple iBeacon（UUID 是 ASCII 的 `INTELLI_ROCKS_HW`）。CoreBluetooth 会把这两段厂商数据拼成一个值交给 bleak，程序收到的就是 31 字节，而不是 6 字节，旧的解析器会把它当成无效数据。现在 `govee.py` 会先去掉末尾的 iBeacon 部分；`tests/test_govee.py` 里收了一条真机数据。
+3. **后台服务只在启动时收到一条读数，之后就不更新了。** CoreBluetooth 默认会过滤重复广播：同一次扫描里，每台设备只报告一次，之后只有广播内容变了（温度或湿度变化 0.1）才会再报告。bleak 3.0.2 没有打开 `CBCentralManagerScanOptionAllowDuplicatesKey`，所以卧室温度稳定时 Mac 什么也收不到，“最后更新”越来越旧，5 分钟后看板就提示没信号了；旧版本还会把同一条读数每分钟重复存一遍。现在分两层处理：
+   - 每次开始扫描后，再用 `AllowDuplicates` 选项调用一次 `scanForPeripheralsWithServices:options:`，让 CoreBluetooth 上报每一条广播。bleak 没有提供这个参数，所以要通过它的内部对象 `scanner._backend._manager.central_manager` 去调；以后 bleak 改了内部结构，就自动退回到下面那一层。
+   - 连续 20 秒没有新广播，就停止扫描再重新开始，新的一次扫描只要收得到，就会再报告一次传感器。实测只靠这一层时，重新扫描后常常要等一两轮才再次收到广播，存下的读数有 40–56 秒旧，离漏掉一分钟只差一点，所以两层都留着。整个运行期间只用一个 `BleakScanner` 反复 start/stop，因为在 macOS 上每新建一个 scanner 就会新建一个 CBCentralManager。
+
+   同一条广播不会重复存储。Linux 上广播会源源不断地进来，不会触发重新扫描。
+4. **隔着墙时，Mac 只能收到传感器很少一部分广播。** 传感器放在卧室（-67 到 -83 dBm），用一个允许重复上报的扫描诊断了 90 秒：这段时间 CoreBluetooth 每 10 秒能上报附近设备 160–430 次，这台 H5075 却只被听到 1 次，同一时间后台服务也没收到。可见问题出在接收这一层（距离、墙，或者传感器本身发得不够勤），既不是软件在过滤，也不是解析出了错。实测 12 分钟里有 10 分钟存到了新数据，偶尔会有一两分钟没有。没收到新广播的那一分钟不会写入数据库，日志里会记一条 `WARNING No new broadcast ...`，曲线上就是少一个点。想要更密的数据，就缩短传感器和 Mac 之间的距离，或者减少中间的墙。
+5. **LaunchAgent 要在你登录以后才会运行。** Mac 重启后，要先登录一次才会开始采集。
 
 ## 已经在用 Home Assistant？
 
