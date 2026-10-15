@@ -1,0 +1,98 @@
+/* 体重 tab. The shared tab layout is in shell.css. */
+
+.wt-change {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4vh 1.6vw;
+  min-height: 3.2vh;  /* one line, so both columns' charts start at the same height */
+  margin: 1.6vh 0 0;
+  font-size: 2.2vh;
+  color: var(--ink-soft);
+}
+.wt-change > span { white-space: nowrap; }
+.wt-change b {
+  font-family: var(--num);
+  font-weight: 600;
+  color: var(--ink);
+}
+.wt-legend { font-size: 1.9vh; }
+
+.tab-weight .chart .wt-dot { fill: var(--ink-faint); opacity: .7; }
+.tab-weight [data-kind="fat"] .chart .line { stroke: var(--ok); }
+
+/* ---- 称重记录 sheet: slides over the tab, closed with 完成. ---- */
+
+.wt-sheet {
+  position: absolute;
+  inset: 0 0 1vh;
+  z-index: 2;
+  background: var(--paper);
+  border-top: 1px solid var(--paper-line);
+}
+.wt-sheet[hidden] { display: none; }
+.wt-sheet-body {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+}
+.wt-sheet-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 1.6vh 0;
+}
+.wt-sheet-head h2 { margin: 0; font-size: 3vh; font-weight: 600; }
+.wt-sheet h3 { margin: 0 0 1.4vh; font-size: 2.2vh; font-weight: 600; color: var(--ink-soft); }
+
+.wt-done,
+.wt-delete {
+  appearance: none;
+  border: 1px solid var(--paper-line);
+  border-radius: 999px;
+  background: none;
+  padding: .7vh 1.6vw;
+  font: inherit;
+  font-size: 2vh;
+  color: var(--ink);
+  cursor: pointer;
+}
+.wt-done { font-weight: 600; }
+.wt-delete { color: var(--ink-soft); padding: .4vh 1.2vw; font-size: 1.8vh; }
+.wt-delete[data-armed] { color: var(--paper); background: var(--warm); border-color: var(--warm); }
+.wt-done:focus-visible,
+.wt-delete:focus-visible { outline: 2px solid var(--cool); outline-offset: 3px; }
+
+.wt-sheet-cols {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 4vw;
+  min-height: 0;
+}
+.wt-sheet-cols > section { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+.wt-list { list-style: none; margin: 0; padding: 0; }
+.wt-list li {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 1.4vw;
+  padding: 1.1vh 0;
+  border-bottom: 1px solid var(--paper-line);
+  font-size: 2.1vh;
+}
+.wt-when { color: var(--ink-soft); white-space: nowrap; }
+.wt-kg, .wt-fat { font-family: var(--num); font-variant-numeric: tabular-nums; text-align: right; }
+.wt-kg { font-weight: 600; }
+.wt-fat { color: var(--ink-soft); }
+.wt-empty { color: var(--ink-soft); }
+
+.wt-metrics {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1vh 2vw;
+  margin: 0;
+  font-size: 2.1vh;
+}
+.wt-metrics dt { color: var(--ink-soft); }
+.wt-metrics dd { margin: 0; font-family: var(--num); font-variant-numeric: tabular-nums; }
+.wt-note { margin: 2.4vh 0 0; font-size: 1.8vh; color: var(--ink-faint); line-height: 1.6; }

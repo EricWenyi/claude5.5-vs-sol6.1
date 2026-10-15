@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="我家">
+<title>我家</title>
+<link rel="stylesheet" href="shell.css">
+<link rel="stylesheet" href="climate.css">
+<link rel="stylesheet" href="weight.css">
+</head>
+<body>
+<div class="home" id="home">
+  <section class="window" aria-label="时间">
+    <div class="clock" id="clock">
+      <time class="clock-time" id="clock-time">--:--</time>
+      <div class="clock-date" id="clock-date"></div>
+    </div>
+  </section>
+  <main class="sheet">
+    <div class="tab-panel" id="tab-panel"></div>
+    <nav class="tabs" id="tabs" aria-label="分区"></nav>
+  </main>
+</div>
+<script src="shell.js"></script>
+<script src="climate.js"></script>
+<script src="weight.js"></script>
+<script>HomeShell.start();</script>
+</body>
+</html>

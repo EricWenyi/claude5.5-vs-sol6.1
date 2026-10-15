@@ -5,9 +5,9 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from bedroom_climate import collector
-from bedroom_climate.collector import GoveeCollector
-from bedroom_climate.store import Store
+from home_dashboard.modules.climate import collector
+from home_dashboard.modules.climate.collector import GoveeCollector
+from home_dashboard.modules.climate.store import Store
 
 PAYLOAD = bytes.fromhex("0003519e6400")  # 21.7 °C, 50.2 %, battery 100 %
 

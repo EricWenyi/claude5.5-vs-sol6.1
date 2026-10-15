@@ -1,0 +1,22 @@
+/* 温湿度 tab. The shared tab layout (header, two columns, readings, charts) is in shell.css. */
+
+.tab-climate .tab-col { --lvl: var(--ink-soft); }
+
+.cl-status {
+  margin: 1.4vh 0 0;
+  font-size: 3.8vh;
+  font-weight: 600;
+  color: var(--lvl);
+}
+.cl-advice {
+  margin: .5vh 0 0;
+  font-size: 2vh;
+  color: var(--ink-soft);
+}
+
+.tab-climate .chart .band { fill: var(--ok); opacity: .16; }
+.tab-climate .chart .dot { fill: var(--lvl); stroke: var(--paper); stroke-width: 2; }
+
+@media (max-aspect-ratio: 1/1) {
+  .cl-status { font-size: 5vw; }
+}

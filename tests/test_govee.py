@@ -1,6 +1,6 @@
 import unittest
 
-from bedroom_climate.govee import Reading, decode_h5075
+from home_dashboard.modules.climate.govee import Reading, decode_h5075
 
 
 class DecodeH5075Test(unittest.TestCase):

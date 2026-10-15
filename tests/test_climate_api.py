@@ -5,8 +5,10 @@ import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from bedroom_climate.server import Api, ApiError, Settings, make_server
-from bedroom_climate.store import Sample, Store
+from home_dashboard.modules.climate import ClimateModule
+from home_dashboard.modules.climate.api import Api, Settings
+from home_dashboard.modules.climate.store import Sample, Store
+from home_dashboard.server import ApiError, make_server
 
 
 class FakeCollector:
@@ -77,7 +79,7 @@ class HttpTest(unittest.TestCase):
     def setUpClass(cls):
         store = Store(":memory:")
         collector = FakeCollector(Sample(time.time(), "GVH5075_TEST", 21.0, 44.0, 90, -60))
-        cls.server = make_server(Api(store, collector, Settings()), "127.0.0.1", 0)
+        cls.server = make_server([ClimateModule(Api(store, collector, Settings()), collector)], "127.0.0.1", 0)
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
         cls.base = f"http://127.0.0.1:{cls.server.server_address[1]}"
 
@@ -95,23 +97,41 @@ class HttpTest(unittest.TestCase):
         except HTTPError as e:
             return e.code, e.read()
 
-    def test_dashboard_page(self):
+    def test_pages(self):
         status, body = self.request("/")
         self.assertEqual(status, 200)
+        self.assertIn("<title>我家</title>".encode(), body)
+        status, body = self.request("/climate-full.html")
+        self.assertEqual(status, 200)
         self.assertIn("卧室温湿度".encode(), body)
+        self.assertEqual(self.request("/climate.js")[0], 200)
+        self.assertEqual(self.request("/nope.js")[0], 404)
+        self.assertEqual(self.request("/../server.py")[0], 404)
+
+    def test_home_lists_tabs(self):
+        status, body = self.request("/api/home")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"tabs": [{"id": "climate", "title": "温湿度"}]})
+
+    def test_latest(self):
+        status, body = self.request("/api/climate/latest")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["temp_c"], 21.0)
 
     def test_check_roundtrip(self):
-        status, body = self.request("/api/checks", "POST", {"temp_c": 21.2, "humidity": 46})
+        status, body = self.request("/api/climate/checks", "POST", {"temp_c": 21.2, "humidity": 46})
         self.assertEqual(status, 200)
         check_id = json.loads(body)["id"]
-        self.assertEqual(self.request(f"/api/checks/{check_id}", "DELETE")[0], 200)
-        self.assertEqual(self.request(f"/api/checks/{check_id}", "DELETE")[0], 404)
+        self.assertEqual(self.request(f"/api/climate/checks/{check_id}", "DELETE")[0], 200)
+        self.assertEqual(self.request(f"/api/climate/checks/{check_id}", "DELETE")[0], 404)
 
     def test_bad_input(self):
-        self.assertEqual(self.request("/api/checks", "POST", {"temp_c": "warm"})[0], 400)
-        self.assertEqual(self.request("/api/checks", "POST", [1, 2])[0], 400)
-        self.assertEqual(self.request("/api/history?hours=abc")[0], 400)
-        self.assertEqual(self.request("/api/nope")[0], 404)
+        self.assertEqual(self.request("/api/climate/checks", "POST", {"temp_c": "warm"})[0], 400)
+        self.assertEqual(self.request("/api/climate/checks", "POST", [1, 2])[0], 400)
+        self.assertEqual(self.request("/api/climate/history?hours=abc")[0], 400)
+        self.assertEqual(self.request("/api/climate/nope")[0], 404)
+        self.assertEqual(self.request("/api/latest")[0], 404)
+        self.assertEqual(self.request("/api/climate/checks", "PUT", {})[0], 501)
 
 
 if __name__ == "__main__":

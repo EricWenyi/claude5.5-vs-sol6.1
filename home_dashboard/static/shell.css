@@ -1,0 +1,269 @@
+/* Home dashboard shell: a "window" with the clock on the left, the active tab on the right.
+   Built for an always-on iPad in landscape; fonts are the ones iPadOS and macOS ship with. */
+
+:root {
+  --paper: #e8eeeb;
+  --paper-line: #cfd9d5;
+  --ink: #1d292e;
+  --ink-soft: #5b6a6f;
+  --ink-faint: #8a979b;
+  --ok: #3f8460;
+  --warm: #b8701f;
+  --cool: #3a72a3;
+  --damp: #24807f;
+  --dry: #9a7b33;
+
+  --num: "Avenir Next", "Avenir", "Helvetica Neue", sans-serif;
+  --ui: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", system-ui, sans-serif;
+  --cal: "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+
+  color-scheme: light;
+}
+
+[data-night] {
+  --paper: #141c21;
+  --paper-line: #26323a;
+  --ink: #aebbc0;
+  --ink-soft: #77878d;
+  --ink-faint: #56646a;
+  --ok: #5f9c7a;
+  --warm: #c08743;
+  --cool: #5f8fbb;
+  --damp: #4d9c9a;
+  --dry: #a48d55;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--ui);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  overflow: hidden;
+}
+
+.home {
+  display: grid;
+  grid-template-columns: 40% 1fr;
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* ---- The window: sky colour follows the time of day; family photos go here later. ---- */
+
+.window {
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+  background: var(--sky);
+  transition: background 2s;
+}
+[data-phase="night"] .window { --sky: linear-gradient(172deg, #0e1a2b 0%, #1a2d47 62%, #273c5a 100%); }
+[data-phase="dawn"]  .window { --sky: linear-gradient(172deg, #4f6e9c 0%, #b897ad 58%, #ecc29d 100%); }
+[data-phase="day"]   .window { --sky: linear-gradient(172deg, #4d8fc7 0%, #8fbde2 58%, #cfe3f0 100%); }
+[data-phase="dusk"]  .window { --sky: linear-gradient(172deg, #2b3a66 0%, #7d6389 52%, #dc9467 100%); }
+
+.clock {
+  position: absolute;
+  top: 7vh;
+  left: 3.2vw;
+  right: 2vw;
+  transform: translate(var(--shift-x, 0), var(--shift-y, 0));
+  text-shadow: 0 1px 12px rgba(10, 20, 40, .18);
+}
+.clock-time {
+  display: block;
+  font-family: var(--num);
+  font-weight: 500;
+  font-size: min(23vh, 13.2vw);
+  line-height: .9;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+.clock-date {
+  margin-top: 2.4vh;
+  font-family: var(--cal);
+  font-size: 4.2vh;
+  letter-spacing: .06em;
+  opacity: .92;
+}
+[data-night] .clock { opacity: .7; }
+
+/* ---- The sheet: the active tab and the tab bar. ---- */
+
+.sheet {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-width: 0;
+  padding: 5vh 3.4vw 0;
+}
+.tab-panel { min-height: 0; transform: translate(var(--shift-x, 0), var(--shift-y, 0)); }
+
+.tabs {
+  display: flex;
+  gap: 3vw;
+  border-top: 1px solid var(--paper-line);
+  padding: 1.6vh 0 max(2vh, env(safe-area-inset-bottom));
+}
+.tabs button {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: .6vh 0;
+  font: inherit;
+  font-size: 2.6vh;
+  color: var(--ink-faint);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+.tabs button:focus-visible { outline: 2px solid var(--cool); outline-offset: 4px; }
+
+/* ---- Layout shared by the tabs: a header, two columns of big readings with charts, a footer link. ---- */
+
+.tab {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+}
+.tab[hidden] { display: none; }
+
+.tab-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2vw;
+}
+.tab-title {
+  margin: 0;
+  font-size: 3.4vh;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+.tab-fresh {
+  margin: 0;
+  font-size: 2.1vh;
+  color: var(--ink-soft);
+}
+.tab-fresh[data-state="stale"],
+.tab-fresh[data-state="offline"] { color: var(--warm); }
+
+/* The two columns share row tracks (subgrid), so if a line wraps in one column the charts
+   below still line up across both. */
+.tab-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(6, auto);
+  gap: 0 4vw;
+  align-content: start;
+  padding-top: 3.5vh;
+  transition: opacity .6s;
+}
+.tab[data-dim] .tab-cols { opacity: .45; }
+.tab-col {
+  display: grid;
+  grid-row: span 6;
+  grid-template-rows: subgrid;
+  align-content: start;
+  min-width: 0;
+}
+
+.reading {
+  display: flex;
+  align-items: flex-start;
+  font-family: var(--num);
+  font-weight: 500;
+  font-size: min(18vh, 8.4vw);
+  line-height: .92;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+.reading-unit {
+  margin: .12em 0 0 .08em;
+  font-size: .3em;
+  letter-spacing: 0;
+  color: var(--ink-soft);
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: 21vh;
+  margin-top: 3.6vh;
+  overflow: visible;
+}
+.chart .base { stroke: var(--paper-line); stroke-width: 1; }
+.chart .line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.chart-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: .8vh;
+  font-size: 1.7vh;
+  color: var(--ink-faint);
+}
+
+.tab-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4vh 2vw;
+  margin: 2.4vh 0 0;
+  font-size: 2.2vh;
+  color: var(--ink-soft);
+}
+.tab-note > span { white-space: nowrap; }
+.tab-note-label { flex-basis: 100%; font-size: 1.9vh; color: var(--ink-faint); }
+.tab-note b,
+.num {
+  font-family: var(--num);
+  font-variant-numeric: tabular-nums;
+}
+.tab-note b { font-weight: 600; color: var(--ink); }
+
+.tab-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 1.4vh 0 1.8vh;
+}
+.tab-more {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--paper-line);
+  padding: 0 0 .2vh;
+  font: inherit;
+  font-size: 2.1vh;
+  color: var(--ink-soft);
+  text-decoration: none;
+  cursor: pointer;
+}
+.tab-more:focus-visible { outline: 2px solid var(--cool); outline-offset: 4px; }
+
+/* Phones and narrow windows: stack the window above the sheet. */
+@media (max-aspect-ratio: 1/1) {
+  html, body { overflow: auto; }
+  .home { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; min-height: 100dvh; }
+  .window { min-height: 34vh; }
+  .clock { position: static; padding: 4vh 6vw; }
+  .clock-time { font-size: 15vh; }
+  .clock-date { font-size: 3vh; }
+  .sheet { padding: 3vh 5vw 0; }
+  .tab-cols { gap: 6vw; }
+  .reading { font-size: 15vw; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .window, .tab-cols { transition: none; }
+  .clock, .tab-panel { transform: none; }
+}

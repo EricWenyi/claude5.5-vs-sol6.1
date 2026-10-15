@@ -69,6 +69,7 @@
   }
   main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
   h1 { font-size: 20px; font-weight: 600; margin: 0; }
+  .back { display: inline-block; margin-bottom: 6px; font-size: 14px; color: var(--text-muted); text-decoration: none; }
   h2 { font-size: 15px; font-weight: 600; margin: 0; }
   p { margin: 0; }
   .secondary { color: var(--text-secondary); }
@@ -171,6 +172,7 @@
 <main>
   <div class="top">
     <div>
+      <a class="back" href="/">返回首页</a>
       <h1>卧室温湿度</h1>
       <div class="meta" id="meta">正在连接…</div>
     </div>
@@ -675,7 +677,7 @@ async function submitCheck(e) {
   const temp = Number(form.temp.value);
   const humidity = Number(form.humidity.value);
   try {
-    await api("/api/checks", {
+    await api("/api/climate/checks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ temp_c: Number(fromUnit(temp).toFixed(2)), humidity }),
@@ -690,7 +692,7 @@ async function submitCheck(e) {
 
 async function deleteCheck(id) {
   try {
-    await api(`/api/checks/${id}`, { method: "DELETE" });
+    await api(`/api/climate/checks/${id}`, { method: "DELETE" });
     await refreshChecks();
   } catch (err) {
     $("form-status").textContent = err.message;
@@ -717,7 +719,7 @@ async function api(path, options) {
 
 async function refreshLatest() {
   try {
-    state.latest = await api("/api/latest");
+    state.latest = await api("/api/climate/latest");
   } catch (err) {
     state.latest = { status: "error", error: err.message };
   }
@@ -728,7 +730,7 @@ async function refreshLatest() {
 async function refreshHistory() {
   CHARTS.forEach((c) => $(c.id).classList.add("loading"));
   try {
-    const h = await api(`/api/history?hours=${state.hours}`);
+    const h = await api(`/api/climate/history?hours=${state.hours}`);
     h.fetchedAt = Date.now();
     state.history = h;
     renderCharts();
@@ -739,7 +741,7 @@ async function refreshHistory() {
 
 async function refreshChecks() {
   try {
-    state.checks = await api("/api/checks");
+    state.checks = await api("/api/climate/checks");
     renderChecks();
   } catch { /* keep the previous render */ }
 }
@@ -775,7 +777,7 @@ new ResizeObserver(() => {
 
 (async function start() {
   try {
-    state.config = await api("/api/config");
+    state.config = await api("/api/climate/config");
   } catch (err) {
     state.latest = { status: "error", error: err.message };
   }

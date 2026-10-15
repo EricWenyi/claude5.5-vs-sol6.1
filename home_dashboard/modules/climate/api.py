@@ -1,23 +1,14 @@
-"""Tiny HTTP server: the dashboard page plus a JSON API."""
+"""JSON API of the 温湿度 tab: latest reading, history, and manual reference checks."""
 
 from __future__ import annotations
 
-import json
-import logging
 import math
-import re
 import time
 from dataclasses import dataclass
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
-from urllib.parse import parse_qs, urlparse
 
+from ...server import ApiError
 from .collector import STALE_AFTER_S
 from .store import Store
-
-log = logging.getLogger(__name__)
-
-INDEX_HTML = Path(__file__).parent / "static" / "index.html"
 
 # Two healthy units should agree within the sum of their rated accuracies:
 # Govee H5075 ±0.3 °C / ±3 %RH, AcuRite 01083M ±0.2 °C (±0.5 °F) / ±2 %RH.
@@ -44,12 +35,6 @@ class Settings:
 
     def humidity(self, raw: float) -> float:
         return round(min(100.0, max(0.0, raw + self.humidity_offset)), 2)
-
-
-class ApiError(Exception):
-    def __init__(self, status: int, message: str):
-        super().__init__(message)
-        self.status = status
 
 
 class Api:
@@ -148,76 +133,3 @@ class Api:
         if not self.store.delete_check(check_id):
             raise ApiError(404, "没有这条记录")
         return {"deleted": check_id}
-
-
-def make_server(api: Api, host: str, port: int) -> ThreadingHTTPServer:
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            url = urlparse(self.path)
-            if url.path in ("/", "/index.html"):
-                self._send(200, INDEX_HTML.read_bytes(), "text/html; charset=utf-8")
-                return
-            routes = {
-                "/api/config": api.config,
-                "/api/latest": api.latest,
-                "/api/checks": api.checks,
-                "/api/history": lambda: api.history(_float_param(url.query, "hours", 24)),
-            }
-            self._dispatch(routes.get(url.path))
-
-        def do_POST(self):
-            if urlparse(self.path).path != "/api/checks":
-                self._dispatch(None)
-                return
-            self._dispatch(lambda: api.add_check(self._json_body()))
-
-        def do_DELETE(self):
-            m = re.fullmatch(r"/api/checks/(\d+)", urlparse(self.path).path)
-            self._dispatch(m and (lambda: api.delete_check(int(m.group(1)))))
-
-        def _dispatch(self, handler):
-            if handler is None:
-                self._json(404, {"error": "not found"})
-                return
-            try:
-                self._json(200, handler())
-            except ApiError as e:
-                self._json(e.status, {"error": str(e)})
-
-        def _json_body(self) -> dict:
-            length = int(self.headers.get("Content-Length") or 0)
-            if not 0 < length <= 10_000:
-                raise ApiError(400, "请求体为空或过大")
-            try:
-                body = json.loads(self.rfile.read(length))
-            except ValueError:
-                raise ApiError(400, "请求体不是合法 JSON") from None
-            if not isinstance(body, dict):
-                raise ApiError(400, "请求体需是 JSON 对象")
-            return body
-
-        def _json(self, status: int, payload) -> None:
-            self._send(status, json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
-
-        def _send(self, status: int, body: bytes, content_type: str) -> None:
-            self.send_response(status)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(body)
-
-        def log_message(self, fmt, *args):
-            log.debug("%s %s", self.address_string(), fmt % args)
-
-    return ThreadingHTTPServer((host, port), Handler)
-
-
-def _float_param(query: str, name: str, default: float) -> float:
-    values = parse_qs(query).get(name)
-    if not values:
-        return default
-    try:
-        return float(values[0])
-    except ValueError:
-        raise ApiError(400, f"{name} 需是数字") from None

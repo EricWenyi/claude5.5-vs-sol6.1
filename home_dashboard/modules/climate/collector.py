@@ -6,6 +6,7 @@ import asyncio
 import logging
 import time
 
+from ...ble import allow_duplicates
 from .govee import GOVEE_COMPANY_ID, decode_h5075
 from .store import Sample, Store
 
@@ -14,7 +15,7 @@ log = logging.getLogger(__name__)
 # A sample older than this is not written again: the sensor is out of range or its battery is dead.
 STALE_AFTER_S = 300
 # Restart the scan when nothing new has arrived for this long. Unless the app asks for duplicates
-# (bleak doesn't; see _allow_duplicates), macOS CoreBluetooth reports a device once per scan and
+# (bleak doesn't; see ble.allow_duplicates), macOS CoreBluetooth reports a device once per scan and
 # then only when its broadcast changes, so while the room stays at the same temperature a Mac
 # hears nothing. A fresh scan reports the sensor again.
 RESCAN_AFTER_S = 20
@@ -76,7 +77,7 @@ class GoveeCollector:
         next_store = time.monotonic() + self.interval_s
         while True:
             await scanner.start()
-            _allow_duplicates(scanner)
+            allow_duplicates(scanner)
             started = time.monotonic()
             try:
                 while time.monotonic() - max(started, self._heard_at) < RESCAN_AFTER_S:
@@ -105,24 +106,6 @@ class GoveeCollector:
             self._stored = s
             log.info("Saved %.1f°C %.1f%% battery %s%% rssi %s, %d s old (%d broadcasts, %d rescans)",
                      s.temp_c, s.humidity, s.battery, s.rssi, time.time() - s.ts, heard, rescans)
-
-
-def _allow_duplicates(scanner) -> bool:
-    """On macOS, ask CoreBluetooth for every broadcast instead of only the first one per scan.
-
-    bleak (3.0.2) has no option for this, so repeat the scan call it just made, with
-    CBCentralManagerScanOptionAllowDuplicatesKey set; CoreBluetooth then replaces the running
-    scan's options. Returns False on other platforms, or if bleak's internals have moved, in
-    which case restarting the scan in run() still keeps readings coming.
-    """
-    try:
-        from CoreBluetooth import CBCentralManagerScanOptionAllowDuplicatesKey
-
-        central_manager = scanner._backend._manager.central_manager
-    except (ImportError, AttributeError):
-        return False
-    central_manager.scanForPeripheralsWithServices_options_(None, {CBCentralManagerScanOptionAllowDuplicatesKey: True})
-    return True
 
 
 async def scan(seconds: float = 15) -> None:
