@@ -56,7 +56,7 @@
           <p class="wt-change" data-part="fat-sub"></p>
           <svg class="chart" data-part="fat-chart" role="img" aria-label="最近 90 天体脂率"></svg>
           <div class="chart-axis"><span>90 天前</span><span>今天</span></div>
-          <p class="tab-note wt-legend">体脂率（估算）</p>
+          <p class="tab-note wt-legend" data-part="fat-legend">体脂率（估算）</p>
         </article>
       </div>
       <footer class="tab-foot">
@@ -75,7 +75,7 @@
             <section>
               <h3 data-part="metrics-title">最近一次的全部指标</h3>
               <dl class="wt-metrics" data-part="metrics"></dl>
-              <p class="wt-note">体脂等数值是用体重、阻抗和身高、年龄、性别估算的，适合看趋势，不是医学测量。</p>
+              <p class="wt-note" data-part="note"></p>
             </section>
           </div>
         </div>
@@ -111,6 +111,10 @@
     const sub = [];
     if (m.body_mass_index != null) sub.push(`<span>BMI <b>${one(m.body_mass_index)}</b></span>`);
     if (m.muscle_mass != null) sub.push(`<span>肌肉量 <b>${one(m.muscle_mass)}</b> kg</span>`);
+    const offset = latest.body_fat_offset || 0;
+    part("fat-legend").textContent = offset ? `体脂率（已校准 ${signed(offset)}）` : "体脂率（估算）";
+    part("note").textContent = "体脂等数值是用体重、阻抗和身高、年龄、性别估算的，适合看趋势，不是医学测量。" +
+      (offset ? `体脂已按参考测量（如 DEXA）校准：在秤的估算上加 ${one(offset)} 个百分点，肌肉量等随之调整。` : "");
     part("fat-sub").innerHTML = m.body_fat_percentage != null
       ? sub.join("")
       : latest.metrics ? "这次没测到阻抗（光脚站上去才能测体脂）" : "设置身高、年龄和性别后显示体脂";

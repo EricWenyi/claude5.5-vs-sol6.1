@@ -44,6 +44,15 @@ class WeightApiTest(unittest.TestCase):
         self.assertEqual(latest["metrics"]["body_mass_index"], 22.98)
         self.assertEqual(latest["metrics"]["body_fat_percentage"], 16.6)
 
+    def test_body_fat_offset_carries_into_derived_metrics(self):
+        # E.g. calibrated against a DEXA scan that read 10 points higher than the scale.
+        api = WeightApi(self.store, Profile(height_cm=175, age=45, sex="male", body_fat_offset=10.0))
+        latest = api.latest(now=T)
+        self.assertEqual(latest["body_fat_offset"], 10.0)
+        self.assertEqual(latest["metrics"]["body_fat_percentage"], 26.6)  # 16.6 + 10
+        self.assertEqual(latest["metrics"]["fat_free_weight"], 51.67)     # 70.4 × (1 − 0.266)
+        self.assertEqual(api.history(1, now=T)["points"][-1][3], 26.6)
+
     def test_change_compares_seven_day_averages(self):
         change = self.api.latest(now=T)["change"]
         self.assertEqual(change, {"week": -0.77, "month": -2.37})  # 70.5333 − 71.3, 70.5333 − 72.9

@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections import deque
 from dataclasses import dataclass
+from functools import cached_property
 from math import floor
 
 from etekcity_esf551_ble import BodyMetrics, Sex
@@ -25,10 +26,26 @@ class Profile:
     height_cm: float | None = None
     age: int | None = None
     sex: str | None = None  # "male" or "female"
+    # Percentage points added to the scale's body-fat estimate, e.g. the difference to a DEXA scan.
+    body_fat_offset: float = 0.0
 
     @property
     def complete(self) -> bool:
         return bool(self.height_cm) and self.age is not None and self.sex in ("male", "female")
+
+
+class _CalibratedBodyMetrics(BodyMetrics):
+    """BodyMetrics with body fat shifted by a fixed offset. Fat-free weight, muscle mass, water and
+    the other metrics are computed from body fat, so they follow the calibrated value."""
+
+    def __init__(self, *args, body_fat_offset: float):
+        super().__init__(*args)
+        self.body_fat_offset = body_fat_offset
+
+    @cached_property
+    def body_fat_percentage(self) -> float:
+        estimate = BodyMetrics.body_fat_percentage.func(self)
+        return max(5, min(75, round(estimate + self.body_fat_offset, 1)))
 
 
 class WeightApi:
@@ -44,7 +61,9 @@ class WeightApi:
         if not (p.complete and w.impedance):
             return {"body_mass_index": floor(w.weight_kg / (p.height_cm / 100) ** 2 * 100) / 100}
         sex = Sex.Male if p.sex == "male" else Sex.Female
-        return BodyMetrics(w.weight_kg, p.height_cm / 100, p.age, sex, w.impedance).as_dict()
+        return _CalibratedBodyMetrics(
+            w.weight_kg, p.height_cm / 100, p.age, sex, w.impedance, body_fat_offset=p.body_fat_offset
+        ).as_dict()
 
     def latest(self, now: float | None = None) -> dict:
         now = time.time() if now is None else now
@@ -65,6 +84,7 @@ class WeightApi:
             "weight_kg": w.weight_kg,
             "impedance": w.impedance,
             "metrics": self.metrics(w),
+            "body_fat_offset": self.profile.body_fat_offset,
             "change": {"week": change(7), "month": change(30)},
         }
 

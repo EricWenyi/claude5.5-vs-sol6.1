@@ -48,6 +48,8 @@ def main() -> None:
     w.add_argument("--height-cm", type=float, help="your height, for BMI and body fat")
     w.add_argument("--age", type=int, help="your age in years, for body fat")
     w.add_argument("--sex", choices=("male", "female"), help="for body fat")
+    w.add_argument("--body-fat-offset", type=float, default=0.0, metavar="POINTS",
+                   help="percentage points added to the scale's body-fat estimate, e.g. to match a DEXA scan")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args()
 
@@ -107,7 +109,7 @@ def _weight(args):
     from .modules.weight.api import Profile, WeightApi
     from .modules.weight.store import WeightStore
 
-    profile = Profile(height_cm=args.height_cm, age=args.age, sex=args.sex)
+    profile = Profile(height_cm=args.height_cm, age=args.age, sex=args.sex, body_fat_offset=args.body_fat_offset)
     if args.demo:
         from .modules.weight.demo import DEMO_PROFILE, add_demo_weigh_ins
 
