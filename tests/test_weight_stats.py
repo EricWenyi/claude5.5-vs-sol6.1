@@ -24,6 +24,27 @@ class DailyTest(unittest.TestCase):
         self.assertAlmostEqual(days[0].kg, 70.5)
         self.assertAlmostEqual(days[1].kg, 154 * KG_PER_LB)
 
+    def test_daytime_and_night_are_kept_apart(self):
+        entries = [
+            Entry(D(2026, 10, 5), 70.0, "kg", "06:30"),
+            Entry(D(2026, 10, 5), 70.4, "kg", "12:00"),
+            Entry(D(2026, 10, 5), 71.5, "kg", "22:15"),
+            Entry(D(2026, 10, 6), 71.0, "kg"),  # time unknown: in the daily mean only
+            Entry(D(2026, 10, 7), 72.0, "kg", "02:00"),  # small hours count as night
+        ]
+        d5, d6, d7 = stats.daily(entries)
+        self.assertAlmostEqual(d5.day_kg, 70.2)
+        self.assertEqual(d5.night_kg, 71.5)
+        self.assertAlmostEqual(d5.kg, (70.0 + 70.4 + 71.5) / 3)
+        self.assertEqual((d5.low, d5.high), (70.0, 71.5))
+        self.assertEqual(d5.readings, (("06:30", 70.0), ("12:00", 70.4), ("22:15", 71.5)))
+        self.assertEqual((d6.day_kg, d6.night_kg, d6.kg), (None, None, 71.0))
+        self.assertEqual((d7.day_kg, d7.night_kg), (None, 72.0))
+
+    def test_part_of_day_boundaries(self):
+        self.assertEqual([stats.part_of_day(t) for t in ("04:59", "05:00", "16:59", "17:00", "23:59", None, "")],
+                         ["night", "day", "day", "night", "night", None, None])
+
     def test_rolling_uses_calendar_days_not_entry_count(self):
         days = days_of([(D(2026, 10, 1), 80), (D(2026, 10, 2), 82), (D(2026, 10, 7), 78), (D(2026, 10, 8), 76)])
         # Oct 7 still sees Oct 1 (7-day window Oct 1-7); Oct 8 doesn't.
@@ -86,8 +107,9 @@ class SummaryTest(unittest.TestCase):
         entries = [Entry(D(2026, 10, d), 170.0 - d / 10, "lb", "07:00") for d in range(1, 13)]
         s = stats.summary(entries)
         self.assertEqual(len(s["days"]), 12)
-        self.assertEqual(s["days"][0], {"date": "2026-10-01", "kg": round(169.9 * KG_PER_LB, 3), "n": 1,
-                                        "avg7": round(169.9 * KG_PER_LB, 3)})
+        kg = round(169.9 * KG_PER_LB, 3)
+        self.assertEqual(s["days"][0], {"date": "2026-10-01", "kg": kg, "n": 1, "avg7": kg, "day": kg, "night": None,
+                                        "low": kg, "high": kg, "readings": [["07:00", kg]]})
         self.assertEqual([w["start"] for w in s["weeks"]], ["2026-09-28", "2026-10-05", "2026-10-12"])
         self.assertEqual(s["months"][0]["days"], 12)
         self.assertAlmostEqual(s["trend"]["kg_per_week"], -0.7 * KG_PER_LB, places=3)

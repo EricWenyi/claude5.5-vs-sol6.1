@@ -17,8 +17,11 @@
     --border: rgba(11, 11, 11, 0.10);
     --hover: rgba(11, 11, 11, 0.05);
     --accent: #2a78d6;
-    --trend: #2a78d6;
+    --day: #eb6834;
+    --night: #2a78d6;
+    --avg: #52514e;
     --daily: #898781;
+    --range: #c3c2b7;
     --good: #0ca30c;
     --critical: #d03b3b;
   }
@@ -35,8 +38,11 @@
       --border: rgba(255, 255, 255, 0.10);
       --hover: rgba(255, 255, 255, 0.06);
       --accent: #3987e5;
-      --trend: #3987e5;
+      --day: #d95926;
+      --night: #3987e5;
+      --avg: #c3c2b7;
       --daily: #898781;
+      --range: #52514e;
     }
   }
   :root[data-theme="dark"] {
@@ -51,8 +57,11 @@
     --border: rgba(255, 255, 255, 0.10);
     --hover: rgba(255, 255, 255, 0.06);
     --accent: #3987e5;
-    --trend: #3987e5;
+    --day: #d95926;
+    --night: #3987e5;
+    --avg: #c3c2b7;
     --daily: #898781;
+    --range: #52514e;
   }
 
   * { box-sizing: border-box; }
@@ -112,6 +121,7 @@
   .weight-row input { width: 128px; font-size: 22px; font-weight: 600; min-height: 44px; padding: 4px 12px; }
   .weight-row .segmented { margin-bottom: 3px; }
   form.entry-form input[type="date"] { width: 150px; }
+  form.entry-form input[type="time"] { width: 110px; }
   .note-field { flex: 1 1 160px; }
   .note-field input { width: 100%; }
   form.entry-form button.primary { min-height: 40px; }
@@ -128,11 +138,15 @@
   /* ---------- chart ---------- */
   .filters { display: flex; align-items: center; gap: 12px; margin: 28px 0 12px; flex-wrap: wrap; }
   .chart-card header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 16px; }
-  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); }
-  .legend[hidden] { display: none; }
-  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-secondary); }
+  .legend[hidden], .legend [hidden] { display: none; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
   .legend .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--daily); }
-  .legend .line { width: 14px; height: 2px; border-radius: 1px; background: var(--trend); }
+  .legend .dot.day { background: var(--day); }
+  .legend .dot.night { background: var(--night); }
+  .legend .line { width: 14px; height: 2px; border-radius: 1px; background: var(--avg); }
+  .chart-summary { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
+  .chart-summary strong { font-weight: 600; color: var(--text-primary); }
   .chart { position: relative; height: 260px; margin-top: 8px; }
   .chart svg { display: block; overflow: visible; }
   .chart svg:focus { outline: none; }
@@ -143,12 +157,16 @@
     background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 8px 10px; font-size: 12px; white-space: nowrap;
   }
-  .tooltip .when { color: var(--text-muted); margin-bottom: 4px; }
-  .tooltip .row { display: flex; align-items: center; gap: 8px; }
-  .tooltip .key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
-  .tooltip .key.dot { width: 8px; height: 8px; border-radius: 50%; margin: 0 2px; }
-  .tooltip strong { font-weight: 600; font-variant-numeric: tabular-nums; }
-  .tooltip .extra { color: var(--text-muted); margin-top: 2px; }
+  .readout .when { color: var(--text-muted); margin-bottom: 4px; }
+  .readout .row { display: flex; align-items: center; gap: 8px; }
+  .readout .key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+  .readout .key.dot { width: 8px; height: 8px; border-radius: 50%; margin: 0 2px; }
+  .readout strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .readout .extra { color: var(--text-muted); margin-top: 2px; }
+  .readout .readings { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--grid); color: var(--text-secondary);
+    display: grid; grid-template-columns: auto auto; justify-content: start; gap: 0 12px; font-variant-numeric: tabular-nums; }
+  .chart-readout { font-size: 12px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--grid); }
+  .chart-readout[hidden] { display: none; }
 
   /* ---------- tables ---------- */
   .tables { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
@@ -224,6 +242,7 @@
         </div>
       </div>
       <label><span>日期</span><input name="date" type="date" required></label>
+      <label><span>时间</span><input name="time" type="time"></label>
       <label class="note-field"><span>备注（可不填）</span><input name="note" type="text" maxlength="200" placeholder="例如：聚餐后、出差"></label>
       <button class="primary" type="submit">记录</button>
     </form>
@@ -272,12 +291,16 @@
     <header>
       <h2 id="chart-title">体重</h2>
       <div class="legend" id="legend">
-        <span><span class="dot"></span>当天</span>
+        <span><span class="dot day"></span>白天</span>
+        <span><span class="dot night"></span>晚上</span>
+        <span id="legend-untimed"><span class="dot"></span>时间未知</span>
         <span><span class="line"></span>7 天平均</span>
       </div>
     </header>
     <div class="hint" id="chart-hint"></div>
+    <div class="chart-summary" id="chart-summary"></div>
     <div class="chart" id="chart"></div>
+    <div class="chart-readout readout" id="chart-readout" aria-live="polite" hidden></div>
   </section>
 
   <div class="tables">
@@ -375,6 +398,9 @@ const todayDate = () => { const d = new Date(); return new Date(d.getFullYear(),
 const weekStartOf = (d) => addDays(d, -((d.getDay() + 6) % 7));
 
 const WEEKDAYS = "日一二三四五六";
+// Same split as stats.py: 05:00-16:59 is daytime, the rest is night.
+const isDaytime = (time) => { const h = Number(time.slice(0, 2)); return h >= 5 && h < 17; };
+const partLabel = (time) => (time ? (isDaytime(time) ? "白天" : "晚上") : "–");
 const md = (d) => `${d.getMonth() + 1}月${d.getDate()}日`;
 const mdShort = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
 function dayLabel(iso) {
@@ -532,48 +558,78 @@ function timeTicks(t0, t1, maxTicks) {
   return ticks;
 }
 
-// One array of points for the chosen grain, each { t, start, end?, ...source }.
+// One array of points for the chosen grain: the source row plus its time span in ms (t0..t1, centre t).
 function chartSeries() {
   const s = state.summary;
   if (state.grain === "day") {
     return s.days.filter(inRange).map((d) => {
-      const start = parseDate(d.date).getTime();
-      return { ...d, start, end: start + DAY_MS, t: start + DAY_MS / 2, value: d.avg7 };
+      const t0 = parseDate(d.date).getTime();
+      return { ...d, t0, t1: t0 + DAY_MS, t: t0 + DAY_MS / 2, value: d.avg7, untimed: untimedKg(d) };
     });
   }
   const list = state.grain === "week" ? s.weeks : s.months;
   return list.filter(inRange).map((p) => {
-    const start = parseDate(p.start).getTime();
-    const end = addDays(parseDate(p.end), 1).getTime();
-    return { ...p, start, end, t: (start + end) / 2, value: p.avg };
+    const t0 = parseDate(p.start).getTime();
+    const t1 = addDays(parseDate(p.end), 1).getTime();
+    return { ...p, t0, t1, t: (t0 + t1) / 2, value: p.avg };
   });
 }
 
 function connected(a, b) {
   // Don't draw a line across a stretch with no weigh-ins, as if there had been data there.
-  if (state.grain === "day") return b.start - a.start <= 7 * DAY_MS;
-  return Math.abs(b.start - a.end) < 2 * 3600e3;  // the next period starts where this one ends (DST-safe)
+  if (state.grain === "day") return b.t0 - a.t0 <= 7 * DAY_MS;
+  return Math.abs(b.t0 - a.t1) < 2 * 3600e3;  // the next period starts where this one ends (DST-safe)
 }
 
 const chart = { geom: null };
+
+const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+const untimedKg = (d) => mean(d.readings.filter(([t]) => !t).map(([, kg]) => kg));
+
+// The day-vs-night comparison for the selected range, above the chart.
+function renderDayNightSummary() {
+  const host = $("chart-summary");
+  host.replaceChildren();
+  const days = state.summary ? state.summary.days.filter(inRange) : [];
+  const dayVals = days.filter((d) => d.day != null);
+  const nightVals = days.filter((d) => d.night != null);
+  if (!dayVals.length && !nightVals.length) return;
+  const u = unitLabel();
+  const parts = [];
+  if (dayVals.length) parts.push("白天平均 ", el("strong", {}, fmtW(mean(dayVals.map((d) => d.day)))));
+  if (nightVals.length) parts.push(parts.length ? " · 晚上平均 " : "晚上平均 ", el("strong", {}, fmtW(mean(nightVals.map((d) => d.night)))));
+  parts.push(` ${u}`);
+  // Only days with both give a fair comparison: otherwise it compares different days.
+  const both = days.filter((d) => d.day != null && d.night != null);
+  if (both.length) {
+    parts.push(" · 同一天晚上比白天 ", el("strong", {}, `${fmtSigned(mean(both.map((d) => d.night - d.day)))} ${u}`),
+      `（${both.length} 天白天、晚上都称了）`);
+  } else {
+    parts.push(dayVals.length ? " · 这段时间没有晚上的记录" : " · 这段时间没有白天的记录");
+  }
+  host.append(...parts);
+}
 
 function renderChart() {
   const host = $("chart");
   host.replaceChildren();
   chart.geom = null;
   state.hover = null;
+  $("chart-readout").hidden = true;
   const s = state.summary;
   const grain = state.grain;
   $("legend").hidden = grain !== "day";
   $("chart-title").textContent = { day: "每天体重", week: "每周平均体重", month: "每月平均体重" }[grain] + `（${unitLabel()}）`;
   $("chart-hint").textContent = {
-    day: "灰点是当天的读数，会因为喝水、吃饭、出汗每天上下波动；蓝线是最近 7 天的平均，更能看出真实走向。",
+    day: "橙点是白天（5–17 点）称的，蓝点是晚上，竖线连起当天最低到最高，深色线是 7 天平均。鼠标移到图上（手机上按住左右滑）看每天的读数。",
     week: "每个点是一周（周一到周日）每天读数的平均。",
     month: "每个点是一个自然月每天读数的平均。",
   }[grain];
+  renderDayNightSummary();
   if (!s) return;
 
   const points = chartSeries();
+  $("legend-untimed").hidden = !(grain === "day" && points.some((p) => p.untimed != null));
   if (!points.length) {
     host.append(el("div", { class: "empty" }, s.days.length ? "这段时间没有记录，换个时间范围看看" : "记几天之后，这里会画出体重曲线"));
     return;
@@ -586,17 +642,18 @@ function renderChart() {
   const ph = H - m.top - m.bottom;
   if (pw <= 0 || ph <= 0) return;
 
-  const t0 = Math.min(rangeStart().getTime(), points[0].start);
-  const t1 = Math.max(addDays(todayDate(), 1).getTime(), points.at(-1).end);
+  const t0 = Math.min(rangeStart().getTime(), points[0].t0);
+  const t1 = Math.max(addDays(todayDate(), 1).getTime(), points.at(-1).t1);
   const x = (t) => m.left + ((t - t0) / (t1 - t0)) * pw;
   const lineValues = points.map((p) => toUnit(p.value));
-  const dotValues = grain === "day" ? points.map((p) => toUnit(p.kg)) : lineValues;
-  const ys = yScale([...lineValues, ...dotValues]);
+  const extremes = grain === "day" ? points.flatMap((p) => [toUnit(p.low), toUnit(p.high)]) : [];
+  const ys = yScale([...lineValues, ...extremes]);
   const y = (v) => m.top + (1 - (v - ys.lo) / (ys.hi - ys.lo)) * ph;
+  const yValue = (py) => ys.lo + (1 - (py - m.top) / ph) * (ys.hi - ys.lo);
 
   const svg = svgEl("svg", {
     width: W, height: H, viewBox: `0 0 ${W} ${H}`, tabindex: "0", role: "img", style: "touch-action: pan-y",
-    "aria-label": `${$("chart-title").textContent}曲线，可用左右方向键逐个查看；完整数据见下方表格`,
+    "aria-label": `${$("chart-title").textContent}，可用左右方向键逐天查看；完整数据见下方表格`,
   });
 
   const decimals = ys.step < 1 ? 1 : 0;
@@ -619,12 +676,15 @@ function renderChart() {
     svg.append(label);
   }
 
-  // Daily readings: small grey dots behind the average line.
+  // Each day's range, lowest to highest reading, like a candle's wick.
+  const spanDays = (t1 - t0) / DAY_MS;
+  const r = spanDays > 120 ? 2.5 : spanDays > 45 ? 3.5 : 4;
   if (grain === "day") {
-    const r = (t1 - t0) / DAY_MS > 120 ? 2.5 : 4;
-    for (let i = 0; i < points.length; i++) {
-      svg.append(svgEl("circle", {
-        cx: x(points[i].t), cy: y(dotValues[i]), r, fill: "var(--daily)", stroke: "var(--surface)", "stroke-width": r > 3 ? 2 : 1,
+    for (const p of points) {
+      if (p.high - p.low < 1e-6) continue;
+      svg.append(svgEl("line", {
+        x1: x(p.t), x2: x(p.t), y1: y(toUnit(p.high)), y2: y(toUnit(p.low)),
+        stroke: "var(--range)", "stroke-width": spanDays > 120 ? 1.5 : 2, "stroke-linecap": "round",
       }));
     }
   }
@@ -634,18 +694,27 @@ function renderChart() {
     d += `${i === 0 || !connected(points[i - 1], p) ? "M" : "L"}${x(p.t).toFixed(1)},${y(lineValues[i]).toFixed(1)}`;
   });
   svg.append(svgEl("path", {
-    d, fill: "none", stroke: "var(--trend)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round",
+    d, fill: "none", stroke: "var(--avg)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round",
   }));
-  if (grain !== "day") {
-    points.forEach((p, i) => svg.append(svgEl("circle", {
-      cx: x(p.t), cy: y(lineValues[i]), r: 4, fill: "var(--trend)", stroke: "var(--surface)", "stroke-width": 2,
-    })));
+
+  const dot = (cx, cy, color, radius = r) => svgEl("circle", {
+    cx, cy, r: radius, fill: color, stroke: "var(--surface)", "stroke-width": radius > 3 ? 2 : 1,
+  });
+  if (grain === "day") {
+    for (const p of points) {
+      const cx = x(p.t);
+      if (p.untimed != null) svg.append(dot(cx, y(toUnit(p.untimed)), "var(--daily)"));
+      if (p.day != null) svg.append(dot(cx, y(toUnit(p.day)), "var(--day)"));
+      if (p.night != null) svg.append(dot(cx, y(toUnit(p.night)), "var(--night)"));
+    }
+  } else {
+    points.forEach((p, i) => svg.append(dot(x(p.t), y(lineValues[i]), "var(--avg)", 4)));
   }
 
-  // Label only the latest value, at the end of the line.
+  // Label only the latest average, at the end of the line.
   const last = points.length - 1;
   const lx = x(points[last].t), ly = y(lineValues[last]);
-  svg.append(svgEl("circle", { cx: lx, cy: ly, r: 4, fill: "var(--trend)", stroke: "var(--surface)", "stroke-width": 2 }));
+  svg.append(dot(lx, ly, "var(--avg)", 4));
   const endLabel = svgEl("text", {
     x: lx + 8, y: ly + 4, fill: "var(--text-secondary)", "font-size": 12, "font-weight": 600,
     style: "font-variant-numeric: tabular-nums",
@@ -656,13 +725,14 @@ function renderChart() {
   const cross = svgEl("g", { "pointer-events": "none" });
   svg.append(cross);
 
-  const hit = svgEl("rect", { x: m.left, y: 0, width: pw, height: m.top + ph, fill: "transparent" });
+  // Like a stock chart: the vertical line snaps to the nearest day, the horizontal one follows the pointer.
+  const hit = svgEl("rect", { x: m.left, y: m.top, width: pw, height: ph, fill: "transparent" });
   const track = (e) => {
     const box = svg.getBoundingClientRect();
     const t = t0 + ((e.clientX - box.left - m.left) / pw) * (t1 - t0);
     let best = 0;
     points.forEach((p, i) => { if (Math.abs(p.t - t) < Math.abs(points[best].t - t)) best = i; });
-    setHover(best);
+    setHover(best, Math.min(m.top + ph, Math.max(m.top, e.clientY - box.top)));
   };
   hit.addEventListener("pointermove", track);
   hit.addEventListener("pointerdown", track);
@@ -679,43 +749,103 @@ function renderChart() {
   });
 
   host.append(svg);
-  chart.geom = { x, y, m, ph, W, cross, host, points, lineValues, dotValues };
+  chart.geom = { x, y, yValue, m, pw, ph, W, cross, host, points, lineValues, decimals };
+  setHover(null);
 }
 
-function setHover(index) {
+// A filled label on an axis, like the price and date tags on a stock chart's crosshair.
+function axisTag(g, cx, cy, text, anchor) {
+  const label = svgEl("text", {
+    x: cx, y: cy + 4, "text-anchor": anchor, fill: "var(--surface)", "font-size": 11, "font-weight": 600,
+    style: "font-variant-numeric: tabular-nums",
+  });
+  label.textContent = text;
+  g.cross.append(label);
+  const b = label.getBBox();
+  g.cross.insertBefore(svgEl("rect", {
+    x: b.x - 5, y: b.y - 2, width: b.width + 10, height: b.height + 4, rx: 4, fill: "var(--text-primary)",
+  }), label);
+}
+
+// On narrow screens a floating tooltip would cover most of the chart, so the readout
+// docks under it instead and shows the latest day until a day is touched.
+const NARROW_CHART = 520;
+
+function readoutContent(p) {
+  const u = unitLabel();
+  const row = (keyClass, color, value, name, extra = "") =>
+    el("div", { class: "row" }, el("span", { class: keyClass, style: { background: color } }),
+      el("strong", {}, `${value} ${u}`), el("span", { class: "muted" }, extra ? `${name} ${extra}` : name));
+  if (state.grain !== "day") {
+    return [
+      el("div", { class: "when" }, state.grain === "week" ? weekLabel(p) : monthLabel(p)),
+      row("key", "var(--avg)", fmtW(p.avg), state.grain === "week" ? "周平均" : "月平均"),
+      el("div", { class: "extra" }, `${p.days} 天有记录 · 最低 ${fmtW(p.min)} · 最高 ${fmtW(p.max)}`),
+    ];
+  }
+  const times = (daytime) => {
+    const ts = p.readings.filter(([t]) => t && isDaytime(t) === daytime).map(([t]) => t);
+    return ts.length > 1 ? `${ts.length} 次平均` : ts[0] || "";
+  };
+  const out = [el("div", { class: "when" }, `${dayLabel(p.date)} 周${WEEKDAYS[parseDate(p.date).getDay()]}`)];
+  if (p.day != null) out.push(row("key dot", "var(--day)", fmtW(p.day), "白天", times(true)));
+  if (p.night != null) out.push(row("key dot", "var(--night)", fmtW(p.night), "晚上", times(false)));
+  if (p.day != null && p.night != null) out.push(el("div", { class: "extra" }, `晚上比白天 ${fmtSigned(p.night - p.day)} ${u}`));
+  if (p.untimed != null) out.push(row("key dot", "var(--daily)", fmtW(p.untimed), "时间未知"));
+  out.push(row("key", "var(--avg)", fmtW(p.avg7), "7 天平均"));
+  // List every reading only when a row above is an average of several.
+  const rowsShown = [p.day, p.night, p.untimed].filter((v) => v != null).length;
+  if (p.n > rowsShown) {
+    out.push(el("div", { class: "readings" }, ...p.readings.flatMap(([t, kg]) =>
+      [el("span", { class: "muted" }, t || "时间未知"), el("span", {}, `${fmtW(kg)} ${u}`)])));
+  }
+  return out;
+}
+
+function setHover(index, py = null) {
   state.hover = index;
   const g = chart.geom;
-  if (!g) return;
+  const docked = $("chart-readout");
+  if (!g) { docked.hidden = true; return; }
+  const narrow = g.W < NARROW_CHART;
+  docked.hidden = !narrow;
   g.cross.replaceChildren();
   g.host.querySelector(".tooltip")?.remove();
-  if (index == null) return;
+  if (index == null) {
+    if (narrow) docked.replaceChildren(...readoutContent(g.points.at(-1)));
+    return;
+  }
 
   const p = g.points[index];
   const cx = g.x(p.t);
-  const u = unitLabel();
-  g.cross.append(svgEl("line", { x1: cx, x2: cx, y1: g.m.top, y2: g.m.top + g.ph, stroke: "var(--text-muted)", "stroke-width": 1 }));
-  if (state.grain === "day") {
-    g.cross.append(svgEl("circle", { cx, cy: g.y(g.dotValues[index]), r: 5, fill: "var(--daily)", stroke: "var(--surface)", "stroke-width": 2 }));
+  const day = state.grain === "day";
+  const line = (attrs) => g.cross.append(svgEl("line", { stroke: "var(--text-muted)", "stroke-width": 1, ...attrs }));
+  line({ x1: cx, x2: cx, y1: g.m.top, y2: g.m.top + g.ph });
+  if (py != null) {
+    line({ x1: g.m.left, x2: g.m.left + g.pw, y1: py, y2: py });
+    axisTag(g, g.m.left - 6, py, g.yValue(py).toFixed(g.decimals + 1), "end");
   }
-  g.cross.append(svgEl("circle", { cx, cy: g.y(g.lineValues[index]), r: 5, fill: "var(--trend)", stroke: "var(--surface)", "stroke-width": 2 }));
+  const dateText = day ? `${mdShort(parseDate(p.date))} 周${WEEKDAYS[parseDate(p.date).getDay()]}`
+    : state.grain === "week" ? weekLabel(p) : monthLabel(p);
+  axisTag(g, cx, g.m.top + g.ph + 13, dateText, "middle");
 
-  const row = (keyClass, color, value, name) =>
-    el("div", { class: "row" }, el("span", { class: keyClass, style: { background: color } }), el("strong", {}, `${value} ${u}`), el("span", { class: "muted" }, name));
-  let tip;
-  if (state.grain === "day") {
-    const date = parseDate(p.date);
-    tip = el("div", { class: "tooltip" },
-      el("div", { class: "when" }, `${dayLabel(p.date)} 周${WEEKDAYS[date.getDay()]}`),
-      row("key dot", "var(--daily)", fmtW(p.kg), p.n > 1 ? `当天（${p.n} 次平均）` : "当天"),
-      row("key", "var(--trend)", fmtW(p.avg7), "7 天平均"));
-  } else {
-    tip = el("div", { class: "tooltip" },
-      el("div", { class: "when" }, state.grain === "week" ? weekLabel(p) : monthLabel(p)),
-      row("key", "var(--trend)", fmtW(p.avg), state.grain === "week" ? "周平均" : "月平均"),
-      el("div", { class: "extra" }, `${p.days} 天有记录 · 最低 ${fmtW(p.min)} · 最高 ${fmtW(p.max)}`));
+  const ring = (v, color) => g.cross.append(svgEl("circle", {
+    cx, cy: g.y(toUnit(v)), r: 5.5, fill: color, stroke: "var(--surface)", "stroke-width": 2,
+  }));
+  ring(p.value, "var(--avg)");
+  if (day) {
+    if (p.untimed != null) ring(p.untimed, "var(--daily)");
+    if (p.day != null) ring(p.day, "var(--day)");
+    if (p.night != null) ring(p.night, "var(--night)");
   }
+
+  if (narrow) {
+    docked.replaceChildren(...readoutContent(p));
+    return;
+  }
+  const tip = el("div", { class: "tooltip readout" }, ...readoutContent(p));
   g.host.append(tip);
-  const left = cx + 12 + tip.offsetWidth > g.W ? cx - 12 - tip.offsetWidth : cx + 12;
+  const left = cx + 16 + tip.offsetWidth > g.W ? cx - 16 - tip.offsetWidth : cx + 16;
   tip.style.left = `${Math.max(0, left)}px`;
 }
 
@@ -757,7 +887,7 @@ function renderEntries() {
     return;
   }
   $("entries").replaceChildren(el("table", {},
-    el("thead", {}, el("tr", {}, el("th", {}, "日期"), el("th", {}, "时间"), el("th", { class: "r" }, "秤上读数"),
+    el("thead", {}, el("tr", {}, el("th", {}, "日期"), el("th", {}, "时间"), el("th", {}, "时段"), el("th", { class: "r" }, "秤上读数"),
       el("th", { class: "r" }, unitLabel()), el("th", {}, "备注"), el("th", {}, ""))),
     el("tbody", {}, ...rows.map((e) => {
       const del = el("button", { class: "link", type: "button", title: "删除", "aria-label": `删除 ${e.date} 的记录` }, "✕");
@@ -765,6 +895,7 @@ function renderEntries() {
       return el("tr", {},
         el("td", {}, `${e.date} 周${WEEKDAYS[parseDate(e.date).getDay()]}`),
         el("td", { class: "secondary" }, e.time || "–"),
+        el("td", { class: "secondary" }, partLabel(e.time)),
         el("td", { class: "r" }, `${e.weight} ${e.unit}`),
         el("td", { class: "r secondary" }, fmtW(e.kg)),
         el("td", { class: "note" }, e.note),
@@ -774,11 +905,17 @@ function renderEntries() {
 
 // ---------- entry form ----------
 
+// Date and time follow the clock until the user changes them. A past date gets no time
+// unless one is typed, so a backfilled reading isn't filed under daytime or night by mistake.
 function resetDateInput() {
-  const input = $("entry-form").date;
+  const { date, time } = $("entry-form");
   const today = isoDate(todayDate());
-  input.max = today;
-  if (!input.value || input.dataset.auto === "1") { input.value = today; input.dataset.auto = "1"; }
+  date.max = today;
+  if (!date.value || date.dataset.auto === "1") { date.value = today; date.dataset.auto = "1"; }
+  if (time.dataset.auto !== "0") {
+    const now = new Date();
+    time.value = date.value === today ? `${pad(now.getHours())}:${pad(now.getMinutes())}` : "";
+  }
 }
 
 async function submitEntry(e) {
@@ -799,18 +936,15 @@ async function submitEntry(e) {
     if (!confirm(`${weight} ${entryUnit} 和${dayLabel(near.date)}的 7 天平均（${asEntered(near.avg7)}）相差比较大。确定没有输错、单位也没选错吗？`)) return;
   }
 
-  const now = new Date();
-  const body = {
-    date, weight, unit: entryUnit, note: form.note.value.trim(),
-    time: date === isoDate(todayDate()) ? `${pad(now.getHours())}:${pad(now.getMinutes())}` : null,
-  };
+  const body = { date, weight, unit: entryUnit, note: form.note.value.trim(), time: form.time.value || null };
   try {
     await api("/api/entries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    status.textContent = `✓ 已记录：${weight} ${entryUnit}（${dayLabel(date)}）`;
+    status.textContent = `✓ 已记录：${weight} ${entryUnit}（${dayLabel(date)}${body.time ? ` ${body.time}，${partLabel(body.time)}` : ""}）`;
     status.dataset.sticky = "1";
     form.weight.value = "";
     form.note.value = "";
     form.date.dataset.auto = "1";
+    form.time.dataset.auto = "1";
     resetDateInput();
     await refresh();
   } catch (err) {
@@ -909,7 +1043,11 @@ document.querySelectorAll("[data-grain]").forEach((b) => b.addEventListener("cli
   renderChart();
 }));
 $("entry-form").addEventListener("submit", submitEntry);
-$("entry-form").date.addEventListener("input", (e) => { e.target.dataset.auto = e.target.value === isoDate(todayDate()) ? "1" : "0"; });
+$("entry-form").date.addEventListener("input", (e) => {
+  e.target.dataset.auto = e.target.value === isoDate(todayDate()) ? "1" : "0";
+  resetDateInput();
+});
+$("entry-form").time.addEventListener("input", (e) => { e.target.dataset.auto = "0"; });
 $("entry-form").weight.addEventListener("input", () => { delete $("form-status").dataset.sticky; });
 $("import-file").addEventListener("change", importFile);
 // Coming back to the tab (e.g. after logging on the phone) picks up new entries and a new day.

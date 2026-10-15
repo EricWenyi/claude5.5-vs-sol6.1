@@ -1,7 +1,8 @@
 """Daily values, rolling average, weekly/monthly averages and the trend.
 
 Everything is built from daily values (the mean of that day's weigh-ins), so a day
-with three weigh-ins counts once, the same as a day with one.
+with three weigh-ins counts once, the same as a day with one. Each day also keeps its
+daytime and night-time means separately, for comparing the two.
 """
 
 from __future__ import annotations
@@ -20,7 +21,18 @@ TREND_DAYS = 28
 TREND_MIN_DAYS = 4
 TREND_MIN_SPAN = 7
 
+# Weigh-ins from DAY_START_HOUR:00 up to NIGHT_START_HOUR:00 count as daytime, the rest as night.
+DAY_START_HOUR = 5
+NIGHT_START_HOUR = 17
+
 ONE_DAY = dt.timedelta(days=1)
+
+
+def part_of_day(time: str | None) -> str | None:
+    """'day' or 'night' for an 'HH:MM' time; None when the time isn't known."""
+    if not time:
+        return None
+    return "day" if DAY_START_HOUR <= int(time[:2]) < NIGHT_START_HOUR else "night"
 
 
 @dataclass(frozen=True)
@@ -28,6 +40,17 @@ class Day:
     date: dt.date
     kg: float
     n: int  # weigh-ins that day
+    day_kg: float | None = None  # mean of the daytime weigh-ins
+    night_kg: float | None = None  # mean of the night-time weigh-ins
+    readings: tuple[tuple[str | None, float], ...] = ()  # every weigh-in as (time, kg), in time order
+
+    @property
+    def low(self) -> float:
+        return min((kg for _, kg in self.readings), default=self.kg)
+
+    @property
+    def high(self) -> float:
+        return max((kg for _, kg in self.readings), default=self.kg)
 
 
 @dataclass(frozen=True)
@@ -41,11 +64,26 @@ class Period:
     change: float | None  # avg minus the previous period's avg; None if that period has no weigh-ins
 
 
+def _mean(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
 def daily(entries: list[Entry]) -> list[Day]:
-    by_date: dict[dt.date, list[float]] = {}
+    """One Day per date with a weigh-in, oldest first. `entries` must be in time order within a day."""
+    by_date: dict[dt.date, list[Entry]] = {}
     for e in entries:
-        by_date.setdefault(e.date, []).append(e.kg)
-    return [Day(d, sum(kgs) / len(kgs), len(kgs)) for d, kgs in sorted(by_date.items())]
+        by_date.setdefault(e.date, []).append(e)
+    return [
+        Day(
+            date=d,
+            kg=_mean([e.kg for e in es]),
+            n=len(es),
+            day_kg=_mean([e.kg for e in es if part_of_day(e.time) == "day"]),
+            night_kg=_mean([e.kg for e in es if part_of_day(e.time) == "night"]),
+            readings=tuple((e.time, e.kg) for e in es),
+        )
+        for d, es in sorted(by_date.items())
+    ]
 
 
 def rolling(days: list[Day], window: int = ROLLING_DAYS) -> list[float]:
@@ -145,7 +183,17 @@ def summary(entries: list[Entry]) -> dict:
     t = trend(days)
     return {
         "days": [
-            {"date": d.date.isoformat(), "kg": _r(d.kg), "n": d.n, "avg7": _r(a)}
+            {
+                "date": d.date.isoformat(),
+                "kg": _r(d.kg),
+                "n": d.n,
+                "avg7": _r(a),
+                "day": _r(d.day_kg),
+                "night": _r(d.night_kg),
+                "low": _r(d.low),
+                "high": _r(d.high),
+                "readings": [[t, _r(kg)] for t, kg in d.readings],
+            }
             for d, a in zip(days, rolling(days))
         ],
         "weeks": [_period_json(p) for p in weekly(days)],
