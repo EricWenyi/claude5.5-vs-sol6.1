@@ -136,7 +136,13 @@ agent-install)
   extra=""  # further python arguments, XML-escaped for the plist
   for a in "$@"; do a=${a//&/&amp;}; a=${a//</&lt;}; a=${a//>/&gt;}; extra="$extra<string>$a</string>"; done
   mkdir -p "$DATA_DIR" "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
-  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null
+  # bootout returns before the old job is gone; bootstrapping too early fails with "5: Input/output error".
+  if launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null; then
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+      launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1 || break
+      sleep 0.5
+    done
+  fi
   prog=""
   if [ "$mode" = app ]; then
     [ -x "$APP/Contents/MacOS/BedroomClimate" ] || build_app || exit 1
@@ -169,7 +175,7 @@ agent-install)
 PL
   plutil -lint "$PLIST" || exit 1
   echo "=== agent start $(date '+%F %T') mode=$mode" >> "$LOG"
-  launchctl bootstrap "$DOMAIN" "$PLIST" || exit 1
+  launchctl bootstrap "$DOMAIN" "$PLIST" || { echo "-- retrying in 3 s"; sleep 3; launchctl bootstrap "$DOMAIN" "$PLIST"; } || exit 1
   echo "-- installed ($mode). If macOS asks about Bluetooth, click Allow. Checking in 90 s..."
   sleep 90
   "$0" agent-status
